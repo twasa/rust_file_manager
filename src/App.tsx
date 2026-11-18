@@ -345,6 +345,10 @@ export const App: React.FC = () => {
           setDualPaneEnabled(!dualPaneEnabled);
           break;
         }
+        case "toggle_queue": {
+          setShowQueueDrawer(!showQueueDrawer);
+          break;
+        }
         case "toggle_hidden": {
           setShowHiddenFiles(!showHiddenFiles);
           break;
@@ -362,6 +366,7 @@ export const App: React.FC = () => {
       activePane,
       conflictStrategy,
       dualPaneEnabled,
+      showQueueDrawer,
       showHiddenFiles,
       addTab,
       closeTab,
@@ -765,7 +770,7 @@ export const App: React.FC = () => {
                 ? "bg-blue-600/20 border-blue-500/50 text-blue-300"
                 : "bg-slate-950 border-slate-800 text-slate-300"
             }`}
-            title="開啟背景傳輸佇列面板"
+            title="開啟 / 關閉背景傳輸佇列懸浮視窗 (F3)"
           >
             <Activity size={13} />
             <span>佇列 ({transferJobs.length})</span>

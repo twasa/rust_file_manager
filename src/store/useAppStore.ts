@@ -141,6 +141,13 @@ export const DEFAULT_KEYBINDINGS: KeybindingItem[] = [
     defaultCombo: "Backspace",
   },
   {
+    id: "toggle_queue",
+    label: "開啟 / 關閉檔案傳輸佇列懸浮視窗",
+    description: "快速顯示或隱藏右下角的背景檔案傳輸佇列懸浮視窗",
+    keyCombo: "F3",
+    defaultCombo: "F3",
+  },
+  {
     id: "toggle_dual_pane",
     label: "切換單欄 / 雙欄並排模式 (Dual-Pane)",
     description: "開啟或關閉左右雙欄指揮官檢視模式",
@@ -762,6 +769,19 @@ export const useAppStore = create<AppStoreState>()(
     }),
     {
       name: "rust_file_manager_settings_v1",
+      merge: (persistedState, currentState) => {
+        const p = (persistedState as Partial<AppStoreState>) || {};
+        // 確保新增的預設快速鍵（如 F3 toggle_queue）自動合併進既有的 localStorage 設定中
+        const mergedKeybindings = DEFAULT_KEYBINDINGS.map((defKb) => {
+          const saved = p.keybindings?.find((k) => k.id === defKb.id);
+          return saved ? { ...defKb, keyCombo: saved.keyCombo } : defKb;
+        });
+        return {
+          ...currentState,
+          ...p,
+          keybindings: mergedKeybindings,
+        };
+      },
       partialize: (state) => ({
         dualPaneEnabled: state.dualPaneEnabled,
         showHiddenFiles: state.showHiddenFiles,

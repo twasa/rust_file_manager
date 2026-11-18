@@ -182,6 +182,7 @@ export type ShortcutActionId =
   | "focus_search"
   | "go_up"
   | "toggle_dual_pane"
+  | "toggle_queue"
   | "toggle_hidden"
   | "open_terminal";
 
