@@ -1,6 +1,7 @@
 use crate::models::{
     normalize_path_str, BatchRenameExecutionResult, BatchRenamePreviewItem, BatchRenameRule,
 };
+use crate::system_ops::validate_safe_entry_name;
 use chrono::Local;
 use regex::RegexBuilder;
 use std::collections::HashSet;
@@ -158,11 +159,8 @@ pub fn preview_batch_rename(
         let mut error = None;
         let mut has_conflict = false;
 
-        if new_name.trim().is_empty() {
-            error = Some("新檔名不可為空".to_string());
-            has_conflict = true;
-        } else if new_name.contains('/') || new_name.contains('\\') || new_name.contains(':') {
-            error = Some("檔名包含非法路徑字元".to_string());
+        if let Err(validation_err) = validate_safe_entry_name(&new_name) {
+            error = Some(validation_err);
             has_conflict = true;
         } else {
             let key_lower = new_path_str.to_lowercase();

@@ -4,9 +4,81 @@ use md5::Md5;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
+
+/// 驗證單一檔案或目錄名稱是否安全（禁止路徑穿越 `..`、斜線、控制字元與 Windows 保留設備名）
+pub fn validate_safe_entry_name(name: &str) -> Result<String, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("名稱不可為空".to_string());
+    }
+    if trimmed == "." || trimmed == ".." {
+        return Err("名稱不可為 '.' 或 '..'".to_string());
+    }
+    if trimmed.contains('/')
+        || trimmed.contains('\\')
+        || trimmed.contains(':')
+        || trimmed.contains('\0')
+    {
+        return Err("名稱包含非法路徑或控制字元".to_string());
+    }
+
+    // 檢查 Windows 保留設備名稱 (CON, PRN, AUX, NUL, COM1..9, LPT1..9)
+    let stem_upper = trimmed
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .to_ascii_uppercase();
+    const RESERVED_NAMES: &[&str] = &[
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+    if RESERVED_NAMES.contains(&stem_upper.as_str()) {
+        return Err(format!("「{}」為作業系統保留設備名稱，無法使用", trimmed));
+    }
+
+    Ok(trimmed.to_string())
+}
+
+/// 檢查壓縮檔內部清單是否包含 Zip Slip 路徑穿越攻擊（如 `../../evil` 或絕對路徑 `/etc/passwd`、`C:\`）
+pub fn validate_archive_entries_list(entries_output: &str) -> Result<(), String> {
+    for raw_line in entries_output.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        // 檢查是否以斜線、反斜線開頭，或包含磁碟機代號 ':'
+        if line.starts_with('/') || line.starts_with('\\') || line.contains(':') {
+            return Err(format!(
+                "安全攔截 (Zip Slip 防護)：壓縮檔內含絕對路徑項目「{}」",
+                line
+            ));
+        }
+
+        let normalized = line.replace('\\', "/");
+        let path = Path::new(&normalized);
+        for comp in path.components() {
+            match comp {
+                Component::ParentDir => {
+                    return Err(format!(
+                        "安全攔截 (Zip Slip 防護)：壓縮檔內含上層路徑穿越項目「{}」",
+                        line
+                    ));
+                }
+                Component::RootDir | Component::Prefix(_) => {
+                    return Err(format!(
+                        "安全攔截 (Zip Slip 防護)：壓縮檔內含根目錄項目「{}」",
+                        line
+                    ));
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
 
 /// 計算檔案的 MD5、SHA-256 與 CRC32 雜湊值（用於右鍵選單「計算檔案校驗雜湊」）
 pub fn compute_file_checksums(raw_path: &str) -> Result<FileChecksumResult, String> {
@@ -156,12 +228,25 @@ pub fn reveal_in_os_shell(raw_path: &str) -> Result<(), String> {
     }
 }
 
-/// 跨平台壓縮或解壓縮檔案（使用系統內建 `tar` 或 PowerShell Archive，支援 `.zip` / `.tar.gz`）
+/// 跨平台壓縮或解壓縮檔案（內建預檢防範 Zip Slip 路徑穿越攻擊）
 pub fn extract_archive_to_dir(archive_path: &str, dest_dir: Option<String>) -> Result<String, String> {
     let archive = PathBuf::from(archive_path);
     if !archive.is_file() {
         return Err("壓縮檔不存在".to_string());
     }
+
+    // 1. 解壓縮前先執行 `tar -tf` 檢視內部項目清單，防範 Zip Slip (如 `../../evil`)
+    let list_output = Command::new("tar")
+        .args(["-tf", &archive.to_string_lossy()])
+        .output()
+        .map_err(|e| format!("無法檢查壓縮檔內容結構: {}", e))?;
+
+    if !list_output.status.success() {
+        return Err("無法讀取壓縮檔目錄清單，檔案可能損壞或格式不受支援".to_string());
+    }
+
+    let entries_str = String::from_utf8_lossy(&list_output.stdout);
+    validate_archive_entries_list(&entries_str)?;
 
     let parent = archive
         .parent()
@@ -178,7 +263,7 @@ pub fn extract_archive_to_dir(archive_path: &str, dest_dir: Option<String>) -> R
 
     fs::create_dir_all(&out_dir).map_err(|e| format!("建立解壓縮目標目錄失敗: {}", e))?;
 
-    // Windows 10/11、macOS 與 Linux 現代系統皆內建 bsdtar / GNU tar，可直接解壓縮 .zip, .tar, .tar.gz, .7z
+    // 2. 驗證通過後才實際執行解壓縮
     let status = Command::new("tar")
         .args([
             "-xf",
@@ -229,4 +314,38 @@ pub fn compress_items_to_zip(sources: &[String], output_zip_path: &str) -> Resul
     }
 
     Ok(normalize_path_str(&out_pb))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_zip_slip_path_traversal_prevention() {
+        // 合法的壓縮檔路徑清單
+        let safe_list = "folder/\nfolder/sub/file.txt\nREADME.md\n";
+        assert!(validate_archive_entries_list(safe_list).is_ok());
+
+        // 含 `../` 的 Zip Slip 路徑穿越
+        let traversal_unix = "folder/\n../../etc/cron.d/backdoor\n";
+        assert!(validate_archive_entries_list(traversal_unix).is_err());
+
+        // 含 `..\` 的 Windows Zip Slip 路徑穿越
+        let traversal_win = "normal.txt\n..\\..\\Windows\\System32\\evil.dll\n";
+        assert!(validate_archive_entries_list(traversal_win).is_err());
+
+        // 含絕對路徑或磁碟代號
+        assert!(validate_archive_entries_list("/etc/passwd\n").is_err());
+        assert!(validate_archive_entries_list("C:\\Windows\\win.ini\n").is_err());
+    }
+
+    #[test]
+    fn test_validate_safe_entry_name() {
+        assert!(validate_safe_entry_name("project_2026.txt").is_ok());
+        assert!(validate_safe_entry_name("..").is_err());
+        assert!(validate_safe_entry_name("../secret").is_err());
+        assert!(validate_safe_entry_name("sub\\file.txt").is_err());
+        assert!(validate_safe_entry_name("CON.txt").is_err());
+        assert!(validate_safe_entry_name("nul").is_err());
+    }
 }

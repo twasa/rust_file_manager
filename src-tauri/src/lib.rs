@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use system_ops::{
     compress_items_to_zip, compute_file_checksums, extract_archive_to_dir, open_terminal_in_dir,
-    open_with_system_default, reveal_in_os_shell,
+    open_with_system_default, reveal_in_os_shell, validate_safe_entry_name,
 };
 use tauri::{Manager, State};
 
@@ -59,12 +59,9 @@ fn cmd_create_directory(
     parent_path: String,
     dir_name: String,
 ) -> Result<String, String> {
-    let trimmed = dir_name.trim();
-    if trimmed.is_empty() {
-        return Err("目錄名稱不可為空".to_string());
-    }
+    let safe_name = validate_safe_entry_name(&dir_name)?;
     let parent = PathBuf::from(&parent_path);
-    let target = parent.join(trimmed);
+    let target = parent.join(&safe_name);
     if target.exists() {
         return Err("已存在同名目錄或檔案".to_string());
     }
@@ -79,12 +76,9 @@ fn cmd_create_file(
     parent_path: String,
     file_name: String,
 ) -> Result<String, String> {
-    let trimmed = file_name.trim();
-    if trimmed.is_empty() {
-        return Err("檔案名稱不可為空".to_string());
-    }
+    let safe_name = validate_safe_entry_name(&file_name)?;
     let parent = PathBuf::from(&parent_path);
-    let target = parent.join(trimmed);
+    let target = parent.join(&safe_name);
     if target.exists() {
         return Err("已存在同名檔案或目錄".to_string());
     }
@@ -99,13 +93,7 @@ fn cmd_rename_item(
     path: String,
     new_name: String,
 ) -> Result<String, String> {
-    let trimmed = new_name.trim();
-    if trimmed.is_empty() {
-        return Err("新名稱不可為空".to_string());
-    }
-    if trimmed.contains('/') || trimmed.contains('\\') {
-        return Err("名稱不可包含斜線字元".to_string());
-    }
+    let safe_name = validate_safe_entry_name(&new_name)?;
     let src = PathBuf::from(&path);
     if !src.exists() {
         return Err("原始項目不存在".to_string());
@@ -113,7 +101,7 @@ fn cmd_rename_item(
     let parent = src
         .parent()
         .ok_or_else(|| "無法取得父目錄".to_string())?;
-    let dst = parent.join(trimmed);
+    let dst = parent.join(&safe_name);
     if dst != src && dst.exists() && dst.to_string_lossy().to_lowercase() != src.to_string_lossy().to_lowercase() {
         return Err("目標名稱已存在".to_string());
     }
@@ -274,10 +262,16 @@ fn cmd_get_default_config_path() -> String {
 
 #[tauri::command]
 fn cmd_save_config_file(target_path: Option<String>, content: String) -> Result<String, String> {
+    if content.len() > 5 * 1024 * 1024 {
+        return Err("設定檔內容超過 5 MB 安全上限".to_string());
+    }
     let path = match target_path {
         Some(p) if !p.trim().is_empty() => PathBuf::from(p.trim()),
         _ => resolve_default_config_file(),
     };
+    if path.extension().and_then(|e| e.to_str()).map(|s| s.to_ascii_lowercase()).as_deref() != Some("json") {
+        return Err("基於安全限制，設定檔副檔名必須為 .json".to_string());
+    }
     // 驗證是否為合法 JSON
     let parsed: serde_json::Value =
         serde_json::from_str(&content).map_err(|e| format!("設定檔 JSON 格式無效: {}", e))?;
@@ -299,6 +293,13 @@ fn cmd_load_config_file(source_path: Option<String>) -> Result<String, String> {
     };
     if !path.exists() {
         return Err(format!("設定檔不存在: {}", normalize_path_str(&path)));
+    }
+    if path.extension().and_then(|e| e.to_str()).map(|s| s.to_ascii_lowercase()).as_deref() != Some("json") {
+        return Err("基於安全限制，僅允許載入 .json 副檔名之設定檔".to_string());
+    }
+    let meta = fs::metadata(&path).map_err(|e| e.to_string())?;
+    if meta.len() > 5 * 1024 * 1024 {
+        return Err("設定檔大小超過 5 MB 安全上限，拒絕載入".to_string());
     }
     let raw = fs::read_to_string(&path)
         .map_err(|e| format!("讀取設定檔失敗 ({}): {}", path.display(), e))?;

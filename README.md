@@ -73,6 +73,14 @@
 - **支援 RAMDisk / ImDisk / Google Drive 雲端硬碟 / 網路磁碟機**：除了標準實體磁碟外，Windows 後端結合 Win32 API (`GetLogicalDrives`、`GetVolumeInformationW`、`GetDiskFreeSpaceExW`) 自動補齊所有邏輯掛載磁碟（如 ImDisk RAMDisk `R:`、Google 雲端硬碟 `G:` 與網路磁碟）。
 - **依磁碟代號字母嚴格排序**：側邊欄儲存空間統一採用 `代號: (磁碟標籤)` 格式（如 `C: (本機磁碟)`、`D: (D)`、`G: (Google Drive)`、`R: (RamDisk)`），並依磁碟字母由小到大整齊排列。
 
+### 10. 資訊安全防護設計 (Security Architecture)
+- **嚴格內容安全政策 (Strict CSP)**：於 `src-tauri/tauri.conf.json` 啟用 `default-src 'self'; script-src 'self'` 等白名單限制，防止 WebView 載入或執行任何外部未知腳本。
+- **壓縮檔解壓縮 Zip Slip 路徑穿越防護 (`src-tauri/src/system_ops.rs`)**：解壓縮前先透過 `validate_archive_entries_list` 預檢壓縮檔內部清單，一旦發現包含 `../`、`..\`、絕對路徑（`/`、`C:\`）即自動攔截並拒絕解壓縮。
+- **檔名安全驗證與保留設備名攔截 (`validate_safe_entry_name`)**：於建立檔案/目錄、原地改名與批次重新命名中，統一攔截路徑跳脫字元（`..`、`/`、`\`、`:`、`\0`）與系統保留設備名（`CON`、`PRN`、`AUX`、`NUL`、`COM1~9`、`LPT1~9`）。
+- **防止目錄遞迴自我複製/搬移炸彈 (`src-tauri/src/queue.rs`)**：佇列執行前強制檢查目標路徑是否為來源目錄之子孫目錄，並於取消任務時自動清除未寫完的殘留檔案。
+- **子行程陣列傳參防範命令注入 (Command Injection Prevention)**：所有外部行程呼叫（`wt`、`pwsh`、`explorer`、`tar`）一律透過 `Command::new().args([...])` 陣列傳遞，不經過 Shell 字串拼接。
+- **設定檔讀寫副檔名與容量保護 (`src-tauri/src/lib.rs`)**：強制限制設定檔讀寫路徑必須為 `.json` 副檔名且不超過 `5 MB`，並於預覽面板限制最多讀取前 `32 KB`，防止任意系統檔案覆寫或大檔記憶體耗盡 (OOM)。
+
 ---
 
 ## 專案目錄結構
