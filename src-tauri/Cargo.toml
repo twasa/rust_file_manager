@@ -1,0 +1,35 @@
+[package]
+name = "rust-file-manager"
+version = "0.1.0"
+description = "Cross-platform High-Performance File Manager built with Rust and Tauri 2.x"
+authors = ["William Wang <5100752+twasa@users.noreply.github.com>"]
+edition = "2021"
+
+[lib]
+name = "rust_file_manager_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs", "io-util", "time"] }
+rayon = "1.10"
+lru = "0.12"
+notify = "6.1"
+regex = "1.11"
+sha2 = "0.10"
+md-5 = "0.10"
+crc32fast = "1.4"
+sysinfo = "0.32"
+trash = "5.2"
+open = "5.3"
+uuid = { version = "1.11", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+dirs = "5.0"
+thiserror = "2.0"
+walkdir = "2.5"
