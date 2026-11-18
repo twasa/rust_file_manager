@@ -8,6 +8,7 @@ import type {
   LogFormat,
   LogLevel,
   PaneId,
+  PendingDeletePrompt,
   QueueRetentionPolicy,
   ShortcutActionId,
   SortDirection,
@@ -226,7 +227,9 @@ interface AppStoreState {
   queueRetention: QueueRetentionPolicy;
   logFormat: LogFormat;
   logLevel: LogLevel;
+  confirmDelete: boolean;
   pendingConflictPrompt: PendingConflictPrompt | null;
+  pendingDeletePrompt: PendingDeletePrompt | null;
   bookmarks: { label: string; path: string }[];
   fontSettings: FontSettings;
   keybindings: KeybindingItem[];
@@ -247,7 +250,9 @@ interface AppStoreState {
   updateQueueRetention: (partial: Partial<QueueRetentionPolicy>) => void;
   setLogFormat: (format: LogFormat) => void;
   setLogLevel: (level: LogLevel) => void;
+  setConfirmDelete: (enabled: boolean) => void;
   setPendingConflictPrompt: (prompt: PendingConflictPrompt | null) => void;
+  setPendingDeletePrompt: (prompt: PendingDeletePrompt | null) => void;
   updateFontSettings: (partial: Partial<FontSettings>) => void;
   updateKeybinding: (id: ShortcutActionId, newCombo: string) => void;
   resetKeybindings: () => void;
@@ -305,7 +310,9 @@ export const useAppStore = create<AppStoreState>()(
       },
       logFormat: "json",
       logLevel: "error",
+      confirmDelete: true,
       pendingConflictPrompt: null,
+      pendingDeletePrompt: null,
       bookmarks: [],
       fontSettings: {
         fontFamily: AVAILABLE_FONTS[0].value,
@@ -346,8 +353,11 @@ export const useAppStore = create<AppStoreState>()(
         })),
       setLogFormat: (format) => set({ logFormat: format }),
       setLogLevel: (level) => set({ logLevel: level }),
+      setConfirmDelete: (enabled) => set({ confirmDelete: enabled }),
       setPendingConflictPrompt: (prompt) =>
         set({ pendingConflictPrompt: prompt }),
+      setPendingDeletePrompt: (prompt) =>
+        set({ pendingDeletePrompt: prompt }),
 
       updateFontSettings: (partial) =>
         set((state) => {
@@ -372,6 +382,9 @@ export const useAppStore = create<AppStoreState>()(
           dualPaneEnabled: false,
           showHiddenFiles: false,
           showPreviewPanel: true,
+          confirmDelete: true,
+          pendingConflictPrompt: null,
+          pendingDeletePrompt: null,
           conflictStrategy: "ask",
           queueRetention: {
             keepHistory: true,
@@ -776,6 +789,7 @@ export const useAppStore = create<AppStoreState>()(
             dualPaneEnabled: state.dualPaneEnabled,
             showHiddenFiles: state.showHiddenFiles,
             showPreviewPanel: state.showPreviewPanel,
+            confirmDelete: state.confirmDelete,
             conflictStrategy: state.conflictStrategy,
             queueRetention: state.queueRetention,
             logFormat: state.logFormat,
@@ -808,6 +822,10 @@ export const useAppStore = create<AppStoreState>()(
             typeof cfg.showPreviewPanel === "boolean"
               ? cfg.showPreviewPanel
               : state.showPreviewPanel,
+          confirmDelete:
+            typeof cfg.confirmDelete === "boolean"
+              ? cfg.confirmDelete
+              : state.confirmDelete,
           conflictStrategy:
             cfg.conflictStrategy === "ask" ||
             cfg.conflictStrategy === "overwrite" ||
