@@ -150,7 +150,13 @@ pub fn read_directory_cached(
     let canonical = target_path
         .canonicalize()
         .unwrap_or_else(|_| target_path.clone());
-    let norm_key = normalize_path_str(&canonical);
+    // 若 canonicalize 將虛擬磁碟或網路磁碟轉為無效或不同的根路徑，回退使用原始路徑
+    let effective_path = if canonical.exists() {
+        canonical
+    } else {
+        target_path
+    };
+    let norm_key = normalize_path_str(&effective_path);
 
     if !force_refresh {
         if let Some(cached) = cache_state.get(&norm_key) {
@@ -158,7 +164,8 @@ pub fn read_directory_cached(
         }
     }
 
-    let read_dir = fs::read_dir(&canonical).map_err(|e| format!("無法讀取目錄 ({}): {}", norm_key, e))?;
+    let read_dir = fs::read_dir(&effective_path)
+        .map_err(|e| format!("無法讀取目錄 ({}): {}", norm_key, e))?;
     let raw_entries: Vec<fs::DirEntry> = read_dir.filter_map(|e| e.ok()).collect();
 
     // 使用 Rayon 平行轉換百萬/萬級目錄項目
@@ -230,7 +237,10 @@ pub fn read_directory_cached(
         }
     }
 
-    let parent_path = canonical.parent().map(normalize_path_str).filter(|p| !p.is_empty() && p != &norm_key);
+    let parent_path = effective_path
+        .parent()
+        .map(normalize_path_str)
+        .filter(|p| !p.is_empty() && p != &norm_key);
     let elapsed_ms = start.elapsed().as_millis() as u64;
 
     let listing = DirectoryListing {
@@ -245,9 +255,133 @@ pub fn read_directory_cached(
     };
 
     cache_state.put(norm_key, listing.clone());
-    cache_state.watch_dir(&canonical);
+    cache_state.watch_dir(&effective_path);
 
     Ok(listing)
+}
+
+#[cfg(target_os = "windows")]
+fn enumerate_windows_logical_volumes(existing: &[VolumeInfo]) -> Vec<VolumeInfo> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetLogicalDrives() -> u32;
+        fn GetDriveTypeW(lpRootPathName: *const u16) -> u32;
+        fn GetVolumeInformationW(
+            lpRootPathName: *const u16,
+            lpVolumeNameBuffer: *mut u16,
+            nVolumeNameSize: u32,
+            lpVolumeSerialNumber: *mut u32,
+            lpMaximumComponentLength: *mut u32,
+            lpFileSystemFlags: *mut u32,
+            lpFileSystemNameBuffer: *mut u16,
+            nFileSystemNameSize: u32,
+        ) -> i32;
+        fn GetDiskFreeSpaceExW(
+            lpDirectoryName: *const u16,
+            lpFreeBytesAvailableToCaller: *mut u64,
+            lpTotalNumberOfBytes: *mut u64,
+            lpTotalNumberOfFreeBytes: *mut u64,
+        ) -> i32;
+    }
+
+    const DRIVE_REMOVABLE: u32 = 2;
+    const DRIVE_RAMDISK: u32 = 6;
+
+    let mut result = existing.to_vec();
+    let mask = unsafe { GetLogicalDrives() };
+
+    for i in 0..26u8 {
+        if (mask & (1 << i)) == 0 {
+            continue;
+        }
+        let letter = (b'A' + i) as char;
+        let mount_slash = format!("{}:/", letter);
+
+        // 若 sysinfo 已經列出該磁碟代號則跳過
+        if result
+            .iter()
+            .any(|v| v.mount_point.eq_ignore_ascii_case(&mount_slash))
+        {
+            continue;
+        }
+
+        let root_win = format!("{}:\\", letter);
+        let root_wide: Vec<u16> = OsStr::new(&root_win)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let drive_type = unsafe { GetDriveTypeW(root_wide.as_ptr()) };
+        if drive_type <= 1 {
+            continue;
+        }
+
+        let mut vol_name_buf = [0u16; 261];
+        let mut fs_name_buf = [0u16; 261];
+        let vol_ok = unsafe {
+            GetVolumeInformationW(
+                root_wide.as_ptr(),
+                vol_name_buf.as_mut_ptr(),
+                vol_name_buf.len() as u32,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                fs_name_buf.as_mut_ptr(),
+                fs_name_buf.len() as u32,
+            )
+        };
+
+        // 若磁碟未就緒 (例如空光碟機或未掛載插槽) 則略過
+        if vol_ok == 0 {
+            continue;
+        }
+
+        let vol_label = String::from_utf16_lossy(
+            &vol_name_buf[..vol_name_buf
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(0)],
+        );
+        let fs_name = String::from_utf16_lossy(
+            &fs_name_buf[..fs_name_buf
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(0)],
+        );
+
+        let mut free_avail = 0u64;
+        let mut total_bytes = 0u64;
+        let mut total_free = 0u64;
+        unsafe {
+            GetDiskFreeSpaceExW(
+                root_wide.as_ptr(),
+                &mut free_avail,
+                &mut total_bytes,
+                &mut total_free,
+            );
+        }
+
+        let display_name = if vol_label.trim().is_empty() {
+            format!("本機磁碟 ({}:)", letter)
+        } else {
+            format!("{} ({}:)", vol_label.trim(), letter)
+        };
+
+        result.push(VolumeInfo {
+            name: display_name,
+            mount_point: mount_slash,
+            file_system: fs_name,
+            total_space: total_bytes,
+            available_space: free_avail,
+            is_removable: drive_type == DRIVE_REMOVABLE || drive_type == DRIVE_RAMDISK,
+        });
+    }
+
+    result.sort_by(|a, b| a.mount_point.cmp(&b.mount_point));
+    result
 }
 
 /// 取得跨平台磁碟區與使用者常用目錄
@@ -272,6 +406,11 @@ pub fn get_system_locations() -> SystemLocations {
             available_space: disk.available_space(),
             is_removable: disk.is_removable(),
         });
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        volumes = enumerate_windows_logical_volumes(&volumes);
     }
 
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"));
@@ -391,3 +530,31 @@ pub fn read_file_preview(raw_path: &str) -> Result<FilePreviewData, String> {
         dir_item_count: None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_system_locations_includes_logical_drives() {
+        let locs = get_system_locations();
+        assert!(!locs.volumes.is_empty());
+        for v in &locs.volumes {
+            println!("Detected Volume: {} -> {} ({}) total={} free={}", v.name, v.mount_point, v.file_system, v.total_space, v.available_space);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            if Path::new("R:/").exists() {
+                assert!(
+                    locs.volumes.iter().any(|v| v.mount_point.eq_ignore_ascii_case("R:/")),
+                    "R:/ RamDisk should be detected in volumes list"
+                );
+                let cache = FsCacheState::new(16);
+                let listing = read_directory_cached(&cache, "R:/", true)
+                    .expect("Should be able to read R:/ RamDisk directory");
+                println!("R:/ entries count = {}, path = {}", listing.entries.len(), listing.path);
+            }
+        }
+    }
+}
+
