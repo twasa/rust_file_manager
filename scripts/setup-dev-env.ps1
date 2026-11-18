@@ -193,7 +193,7 @@ Write-Info "正在透過 fnm 安裝並鎖定 Node.js v$NodeVersion..."
 & $fnmExe default $NodeVersion
 (& $fnmExe env --shell power-shell) | Out-String | Invoke-Expression
 
-# 永久寫入使用者環境變數 PATH (Windows User PATH)
+# 永久寫入使用者環境變數 PATH (Windows User PATH) 與 PowerShell $PROFILE
 if ($IsWindows) {
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     $toAdd = @()
@@ -204,6 +204,26 @@ if ($IsWindows) {
         $updatedPath = ($userPath.TrimEnd(';') + ';' + ($toAdd -join ';')).TrimStart(';')
         [Environment]::SetEnvironmentVariable("Path", $updatedPath, "User")
         Write-Ok "已將 Cargo 與 Node 預設路徑寫入使用者永久 PATH"
+    }
+
+    if ($PROFILE -and (Test-Path $PROFILE)) {
+        $profileContent = Get-Content $PROFILE -Raw
+        if ($profileContent -notmatch [regex]::Escape(".cargo") -or $profileContent -notmatch "fnm") {
+            $appendBlock = @"
+
+# --- Rust (Cargo) & Node.js (fnm) ---
+foreach (`$p in @("`$HOME\.cargo\bin", "`$env:APPDATA\fnm\aliases\default")) {
+    if ((Test-Path `$p) -and (`$env:Path -notlike "*`$p*")) {
+        `$env:Path = "`$p;`$env:Path"
+    }
+}
+if (Get-Command fnm -ErrorAction SilentlyContinue) {
+    fnm env --use-on-cd --shell power-shell | Out-String | Invoke-Expression
+}
+"@
+            Add-Content -Path $PROFILE -Value $appendBlock
+            Write-Ok "已同步更新 PowerShell Profile ($PROFILE) 載入 Cargo 與 fnm"
+        }
     }
 }
 
