@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# pre-push - keep main a merge-only branch (AGENTS.md Section 5 compliance)
+#
+# Installed via:
+#   git config core.hooksPath .githooks
+
+set -o nounset
+
+ZERO='0000000000000000000000000000000000000000'
+PROTECTED="${DH_PROTECTED_BRANCHES:-main master}"
+
+red()  { if [ -t 2 ]; then printf '\033[0;31m%s\033[0m\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi; }
+info() { printf '%s\n' "$*" >&2; }
+
+is_protected() {
+  local candidate="$1" b
+  for b in $PROTECTED; do [ "$candidate" = "$b" ] && return 0; done
+  return 1
+}
+
+refuse() {
+  red "pre-push: refusing to push to '$1'"
+  info ''
+  info "  $2"
+  info ''
+  info '  main is merge-only (AGENTS.md Section 5). Open a pull request instead:'
+  info ''
+  info '    git worktree add .worktrees/<type>/<name> -b <type>/<name> main'
+  info '    git push --set-upstream origin <type>/<name>'
+  info '    gh pr create --base main'
+  info ''
+  exit 1
+}
+
+if [ "${DH_ALLOW_PUSH_MAIN:-0}" != "1" ]; then
+  while read -r _local_ref local_oid remote_ref remote_oid; do
+    [ -n "${remote_ref:-}" ] || continue
+    case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
+
+    branch="${remote_ref#refs/heads/}"
+    is_protected "$branch" || continue
+
+    if [ "$local_oid" = "$ZERO" ]; then
+      refuse "$branch" 'this would DELETE the branch on the remote.'
+    fi
+
+    if [ "$remote_oid" != "$ZERO" ] &&
+       ! git merge-base --is-ancestor "$remote_oid" "$local_oid" 2>/dev/null; then
+      refuse "$branch" 'this is a FORCE push - it would discard commits on the remote.'
+    fi
+
+    refuse "$branch" 'direct pushes bypass CI and code review.'
+  done
+fi
+
+exit 0

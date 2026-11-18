@@ -30,8 +30,10 @@ import {
   apiOpenItem,
   apiOpenTerminal,
   apiRevealInShell,
+  apiSetLogFormat,
   apiSetQueueRetention,
   apiUndoBatchRename,
+  apiWriteFrontendLog,
 } from "./api";
 import { useAppStore } from "./store/useAppStore";
 import { keyboardEventToCombo } from "./utils/formatters";
@@ -64,6 +66,7 @@ export const App: React.FC = () => {
   const setShowQueueDrawer = useAppStore((s) => s.setShowQueueDrawer);
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
   const queueRetention = useAppStore((s) => s.queueRetention);
+  const logFormat = useAppStore((s) => s.logFormat);
   const setPendingConflictPrompt = useAppStore(
     (s) => s.setPendingConflictPrompt
   );
@@ -103,7 +106,7 @@ export const App: React.FC = () => {
   const [batchRenameTargets, setBatchRenameTargets] = useState<FileEntry[]>([]);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<
-    "appearance" | "shortcuts" | "queue" | "config"
+    "appearance" | "shortcuts" | "queue" | "config" | "logs"
   >("appearance");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -140,6 +143,43 @@ export const App: React.FC = () => {
     document.documentElement.style.fontFamily = fontSettings.fontFamily;
     document.body.style.fontFamily = fontSettings.fontFamily;
   }, [fontSettings.fontFamily, fontSettings.uiFontSizePx]);
+
+  // 同步日誌格式設定並攔截前端全域未處理錯誤寫入後端結構化日誌檔
+  useEffect(() => {
+    apiSetLogFormat(logFormat).catch(console.error);
+  }, [logFormat]);
+
+  useEffect(() => {
+    const onWindowError = (event: ErrorEvent) => {
+      apiWriteFrontendLog(
+        "ERROR",
+        "frontend::window",
+        "uncaught_error",
+        event.message || "Uncaught window error",
+        {
+          filename: event.filename,
+          lineno: event.lineno,
+          colno: event.colno,
+        }
+      ).catch(() => {});
+    };
+
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      apiWriteFrontendLog(
+        "ERROR",
+        "frontend::promise",
+        "unhandled_rejection",
+        String(event.reason || "Unhandled promise rejection")
+      ).catch(() => {});
+    };
+
+    window.addEventListener("error", onWindowError);
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+    return () => {
+      window.removeEventListener("error", onWindowError);
+      window.removeEventListener("unhandledrejection", onUnhandledRejection);
+    };
+  }, []);
 
   // 將佇列事件保留策略同步至 Rust 後端並套用過期/超量裁剪
   useEffect(() => {

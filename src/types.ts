@@ -222,3 +222,17 @@ export interface DragPayload {
   sourcePane: PaneId;
   paths: string[];
 }
+
+export type LogFormat = "json" | "text";
+
+export interface StructuredLogRecord {
+  timestamp: string;
+  level: string;
+  target: string;
+  event: string;
+  message: string;
+  context?: Record<string, unknown> | null;
+  pid: number;
+  os: string;
+}
+

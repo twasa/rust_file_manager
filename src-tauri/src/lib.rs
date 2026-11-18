@@ -1,17 +1,20 @@
 pub mod batch_rename;
 pub mod fs_ops;
+pub mod logger;
 pub mod models;
 pub mod queue;
 pub mod system_ops;
 
 use batch_rename::{execute_batch_rename, preview_batch_rename, undo_batch_rename};
 use fs_ops::{get_system_locations, read_directory_cached, read_file_preview, FsCacheState};
+use logger::{diagnose_config_value, AppLogger, LogFormat, StructuredLogRecord};
 use models::{
     normalize_path_str, BatchRenameExecutionResult, BatchRenamePreviewItem, BatchRenameRule,
     ConflictStrategy, DirectoryListing, FileChecksumResult, FilePreviewData, QueueRetentionPolicy,
     SystemLocations, TransferConflictItem, TransferJobSnapshot, TransferJobType,
 };
 use queue::QueueManager;
+use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -24,6 +27,7 @@ use tauri::{Manager, State};
 pub struct AppState {
     pub cache: Arc<FsCacheState>,
     pub queue: Arc<QueueManager>,
+    pub logger: Arc<AppLogger>,
 }
 
 #[tauri::command]
@@ -311,8 +315,19 @@ fn cmd_get_default_config_path() -> String {
 }
 
 #[tauri::command]
-fn cmd_save_config_file(target_path: Option<String>, content: String) -> Result<String, String> {
+fn cmd_save_config_file(
+    state: State<'_, AppState>,
+    target_path: Option<String>,
+    content: String,
+) -> Result<String, String> {
     if content.len() > 5 * 1024 * 1024 {
+        state.logger.log(
+            "ERROR",
+            "backend::config",
+            "config_save_oversize",
+            "設定檔內容超過 5 MB 安全上限",
+            Some(json!({ "sizeBytes": content.len() })),
+        );
         return Err("設定檔內容超過 5 MB 安全上限".to_string());
     }
     let path = match target_path {
@@ -320,23 +335,59 @@ fn cmd_save_config_file(target_path: Option<String>, content: String) -> Result<
         _ => resolve_default_config_file(),
     };
     if path.extension().and_then(|e| e.to_str()).map(|s| s.to_ascii_lowercase()).as_deref() != Some("json") {
+        state.logger.log(
+            "WARN",
+            "backend::config",
+            "config_save_invalid_ext",
+            "拒絕寫入非 .json 副檔名之設定檔",
+            Some(json!({ "path": normalize_path_str(&path) })),
+        );
         return Err("基於安全限制，設定檔副檔名必須為 .json".to_string());
     }
     // 驗證是否為合法 JSON
-    let parsed: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("設定檔 JSON 格式無效: {}", e))?;
+    let parsed: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+        state.logger.log(
+            "ERROR",
+            "backend::config",
+            "config_save_invalid_json",
+            &format!("設定檔 JSON 格式無效: {}", e),
+            Some(json!({ "line": e.line(), "column": e.column() })),
+        );
+        format!("設定檔 JSON 格式無效 (第 {} 行第 {} 列): {}", e.line(), e.column(), e)
+    })?;
     let pretty =
         serde_json::to_string_pretty(&parsed).map_err(|e| format!("格式化 JSON 失敗: {}", e))?;
 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("無法建立設定檔目錄: {}", e))?;
     }
-    fs::write(&path, pretty).map_err(|e| format!("寫入設定檔失敗 ({}): {}", path.display(), e))?;
-    Ok(normalize_path_str(&path))
+    fs::write(&path, pretty).map_err(|e| {
+        state.logger.log(
+            "ERROR",
+            "backend::config",
+            "config_save_io_error",
+            &format!("寫入設定檔失敗: {}", e),
+            Some(json!({ "path": normalize_path_str(&path) })),
+        );
+        format!("寫入設定檔失敗 ({}): {}", path.display(), e)
+    })?;
+
+    let saved = normalize_path_str(&path);
+    state.logger.log(
+        "INFO",
+        "backend::config",
+        "config_saved",
+        "已成功儲存設定檔",
+        Some(json!({ "path": saved })),
+    );
+    Ok(saved)
 }
 
 #[tauri::command]
-fn cmd_load_config_file(source_path: Option<String>) -> Result<String, String> {
+fn cmd_load_config_file(
+    state: State<'_, AppState>,
+    source_path: Option<String>,
+) -> Result<String, String> {
     let path = match source_path {
         Some(p) if !p.trim().is_empty() => PathBuf::from(p.trim()),
         _ => resolve_default_config_file(),
@@ -353,14 +404,108 @@ fn cmd_load_config_file(source_path: Option<String>) -> Result<String, String> {
     }
     let raw = fs::read_to_string(&path)
         .map_err(|e| format!("讀取設定檔失敗 ({}): {}", path.display(), e))?;
-    // 驗證 JSON 語法
-    let _: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|e| format!("設定檔不是有效的 JSON: {}", e))?;
+
+    // 驗證 JSON 語法，若損毀則記錄詳細行號並自動建立 .corrupted.bak 備份
+    let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            let bak_path = path.with_extension("json.corrupted.bak");
+            let _ = fs::copy(&path, &bak_path);
+            let err_msg = format!(
+                "設定檔 JSON 語法損毀 (第 {} 行, 第 {} 列): {} (已自動備份至 {})",
+                e.line(),
+                e.column(),
+                e,
+                normalize_path_str(&bak_path)
+            );
+            state.logger.log(
+                "ERROR",
+                "backend::config",
+                "config_load_corrupted_json",
+                &err_msg,
+                Some(json!({
+                    "path": normalize_path_str(&path),
+                    "backupPath": normalize_path_str(&bak_path),
+                    "line": e.line(),
+                    "column": e.column()
+                })),
+            );
+            return Err(err_msg);
+        }
+    };
+
+    // 深度診斷欄位結構並記錄警告
+    let warnings = diagnose_config_value(&parsed);
+    if !warnings.is_empty() {
+        state.logger.log(
+            "WARN",
+            "backend::config",
+            "config_schema_warnings",
+            "載入的設定檔包含非標準或異常欄位值，部分設定將回退預設值",
+            Some(json!({
+                "path": normalize_path_str(&path),
+                "warnings": warnings
+            })),
+        );
+    } else {
+        state.logger.log(
+            "INFO",
+            "backend::config",
+            "config_loaded",
+            "已成功驗證並載入設定檔",
+            Some(json!({ "path": normalize_path_str(&path) })),
+        );
+    }
+
     Ok(raw)
+}
+
+#[tauri::command]
+fn cmd_get_log_file_path(state: State<'_, AppState>) -> String {
+    state.logger.get_log_path_str()
+}
+
+#[tauri::command]
+fn cmd_read_logs(state: State<'_, AppState>, limit: Option<usize>) -> Vec<StructuredLogRecord> {
+    state.logger.read_recent_logs(limit.unwrap_or(200))
+}
+
+#[tauri::command]
+fn cmd_clear_logs(state: State<'_, AppState>) -> Result<(), String> {
+    state.logger.clear_logs()?;
+    state.logger.log(
+        "INFO",
+        "backend::logger",
+        "logs_cleared",
+        "使用者已手動清空歷史日誌檔",
+        None,
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn cmd_set_log_format(state: State<'_, AppState>, format: LogFormat) {
+    state.logger.set_format(format);
+}
+
+#[tauri::command]
+fn cmd_write_frontend_log(
+    state: State<'_, AppState>,
+    level: String,
+    target: String,
+    event: String,
+    message: String,
+    context: Option<Value>,
+) {
+    state
+        .logger
+        .log(&level, &target, &event, &message, context);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let logger = AppLogger::new();
+    AppLogger::install_panic_hook(Arc::clone(&logger));
     let cache = FsCacheState::new(128);
     let queue = QueueManager::new(Arc::clone(&cache));
 
@@ -368,6 +513,7 @@ pub fn run() {
         .manage(AppState {
             cache: Arc::clone(&cache),
             queue: Arc::clone(&queue),
+            logger: Arc::clone(&logger),
         })
         .setup(move |app| {
             let state = app.state::<AppState>();
@@ -399,6 +545,11 @@ pub fn run() {
             cmd_get_default_config_path,
             cmd_save_config_file,
             cmd_load_config_file,
+            cmd_get_log_file_path,
+            cmd_read_logs,
+            cmd_clear_logs,
+            cmd_set_log_format,
+            cmd_write_frontend_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
