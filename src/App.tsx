@@ -127,6 +127,17 @@ export const App: React.FC = () => {
     return () => clearTimeout(t);
   }, [toastMsg]);
 
+  // 將字形家族 (fontFamily) 與全域 UI 介面字體縮放 (uiFontSizePx) 同步套用至根節點 (<html> & <body>)
+  useEffect(() => {
+    const uiBase = fontSettings.uiFontSizePx || 14;
+    // Tailwind 的 text-xs 為 0.75rem (當 root 16px 時為 12px)。
+    // 將 root font-size 按比例縮放，讓所有側邊欄、分頁列、工具列、右鍵選單與對話視窗等比放大縮小！
+    const rootScalePx = Math.round((uiBase / 14) * 16 * 10) / 10;
+    document.documentElement.style.fontSize = `${rootScalePx}px`;
+    document.documentElement.style.fontFamily = fontSettings.fontFamily;
+    document.body.style.fontFamily = fontSettings.fontFamily;
+  }, [fontSettings.fontFamily, fontSettings.uiFontSizePx]);
+
   // 初始化系統掛載點與背景佇列事件監聽
   useEffect(() => {
     apiGetSystemLocations()
@@ -625,7 +636,10 @@ export const App: React.FC = () => {
   ).length;
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden select-none">
+    <div
+      style={{ fontFamily: fontSettings.fontFamily }}
+      className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden select-none"
+    >
       {/* 頂部全域功能列 */}
       <header className="h-11 px-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0 text-xs">
         {/* 左側品牌與快速工具 */}
@@ -717,7 +731,7 @@ export const App: React.FC = () => {
 
         {/* 右側字體大小快捷微調、雙欄切換、任務佇列與設定 */}
         <div className="flex items-center gap-1.5">
-          {/* 字體大小快速微調 */}
+          {/* 字體大小快速微調 (同時微調檔案列表與全域 UI 字體) */}
           <div className="flex items-center bg-slate-950 border border-slate-800 rounded-md px-1.5 py-0.5 gap-1">
             <Type size={13} className="text-slate-400" />
             <button
@@ -725,14 +739,23 @@ export const App: React.FC = () => {
               onClick={() =>
                 updateFontSettings({
                   fontSizePx: Math.max(11, fontSettings.fontSizePx - 1),
+                  uiFontSizePx: Math.max(
+                    11,
+                    (fontSettings.uiFontSizePx || 14) - 1
+                  ),
                 })
               }
               className="px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-300 font-mono"
-              title="縮小字體"
+              title="同時縮小檔案列表與 UI 介面字體"
             >
               A-
             </button>
-            <span className="text-[11px] font-mono text-blue-400 px-1">
+            <span
+              className="text-[11px] font-mono text-blue-400 px-1"
+              title={`檔案列表: ${fontSettings.fontSizePx}px / UI 介面: ${
+                fontSettings.uiFontSizePx || 14
+              }px`}
+            >
               {fontSettings.fontSizePx}px
             </span>
             <button
@@ -740,10 +763,14 @@ export const App: React.FC = () => {
               onClick={() =>
                 updateFontSettings({
                   fontSizePx: Math.min(24, fontSettings.fontSizePx + 1),
+                  uiFontSizePx: Math.min(
+                    22,
+                    (fontSettings.uiFontSizePx || 14) + 1
+                  ),
                 })
               }
               className="px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-300 font-mono"
-              title="放大字體"
+              title="同時放大檔案列表與 UI 介面字體"
             >
               A+
             </button>

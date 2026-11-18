@@ -209,6 +209,7 @@ export interface FontSettings {
   fontFamily: string;
   fontSizePx: number;
   rowHeightPx: number;
+  uiFontSizePx: number;
 }
 
 export interface DragPayload {

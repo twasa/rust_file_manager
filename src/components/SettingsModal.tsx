@@ -287,11 +287,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-medium text-slate-200">
-                      字體大小 (Font Size)
+                      檔案列表字體大小
                     </span>
                     <span className="text-blue-400 font-mono font-semibold">
                       {fontSettings.fontSizePx} px
@@ -311,9 +311,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-full accent-blue-500 cursor-pointer"
                   />
                   <div className="flex justify-between text-[11px] text-slate-500 mt-1">
+                    <span>11px</span>
+                    <span>14px</span>
+                    <span>24px</span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-slate-200">
+                      全域 UI 介面字體大小
+                    </span>
+                    <span className="text-purple-400 font-mono font-semibold">
+                      {fontSettings.uiFontSizePx || 14} px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={11}
+                    max={22}
+                    step={1}
+                    value={fontSettings.uiFontSizePx || 14}
+                    onChange={(e) =>
+                      updateFontSettings({
+                        uiFontSizePx: Number(e.target.value),
+                      })
+                    }
+                    className="w-full accent-purple-500 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[11px] text-slate-500 mt-1">
                     <span>緊湊 (11px)</span>
                     <span>標準 (14px)</span>
-                    <span>大型高清晰 (24px)</span>
+                    <span>放大 (22px)</span>
                   </div>
                 </div>
 
@@ -340,9 +369,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-full accent-emerald-500 cursor-pointer"
                   />
                   <div className="flex justify-between text-[11px] text-slate-500 mt-1">
-                    <span>高密度 (26px)</span>
-                    <span>舒適 (34px)</span>
-                    <span>寬鬆 (58px)</span>
+                    <span>26px</span>
+                    <span>34px</span>
+                    <span>58px</span>
                   </div>
                 </div>
               </div>

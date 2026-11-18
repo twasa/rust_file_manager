@@ -297,6 +297,7 @@ export const useAppStore = create<AppStoreState>()(
         fontFamily: AVAILABLE_FONTS[0].value,
         fontSizePx: 14,
         rowHeightPx: 34,
+        uiFontSizePx: 14,
       },
       keybindings: DEFAULT_KEYBINDINGS,
       panes: {
@@ -809,9 +810,18 @@ export const useAppStore = create<AppStoreState>()(
               : saved.keyCombo;
           return { ...defKb, keyCombo: nextCombo };
         });
+        const mergedFontSettings: FontSettings = {
+          ...currentState.fontSettings,
+          ...(p.fontSettings || {}),
+          uiFontSizePx:
+            p.fontSettings?.uiFontSizePx ||
+            currentState.fontSettings.uiFontSizePx ||
+            14,
+        };
         return {
           ...currentState,
           ...p,
+          fontSettings: mergedFontSettings,
           keybindings: mergedKeybindings,
         };
       },
