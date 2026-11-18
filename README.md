@@ -84,6 +84,12 @@
 - **子行程陣列傳參防範命令注入 (Command Injection Prevention)**：所有外部行程呼叫（`wt`、`pwsh`、`explorer`、`tar`）一律透過 `Command::new().args([...])` 陣列傳遞，不經過 Shell 字串拼接。
 - **設定檔讀寫副檔名與容量保護 (`src-tauri/src/lib.rs`)**：強制限制設定檔讀寫路徑必須為 `.json` 副檔名且不超過 `5 MB`，並於預覽面板限制最多讀取前 `32 KB`，防止任意系統檔案覆寫或大檔記憶體耗盡 (OOM)。
 
+### 11. 結構化 JSON 日誌與設定檔損毀診斷 (`src-tauri/src/logger.rs`)
+- **JSON Lines (`.jsonl`) 現代化日誌格式**：預設以單行 JSON (`timestamp`, `level`, `target`, `event`, `message`, `context`, `pid`, `os`) 寫入 `rust-file-manager/logs/rfm.jsonl`（單檔上限 5 MB 自動輪替 Rotation），方便直接對接 `jq`、Grafana Loki、ELK 或 Datadog 進行收集與查詢，亦支援在設定中切換為 Plain Text 格式。
+- **全域 Panic Hook 與前端未捕獲錯誤攔截**：自動註冊 Rust `std::panic::set_hook` 以及前端 `window.onerror` / `unhandledrejection` 監聽器，任何異常皆會連同行號寫入日誌檔。
+- **設定檔語法損毀自動備份與欄位診斷**：當載入的設定檔 JSON 語法錯誤時，日誌會精準記錄錯誤之 `line` 與 `column` 並自動將損毀檔案備份為 `.json.corrupted.bak`；若設定欄位值超出範圍則自動記錄 `WARN` 診斷訊息。
+- **內建 UI 日誌檢視器**：於「設定與快捷鍵 -> 系統診斷日誌 (JSON Logs)」分頁中，支援依等級（`ALL` / `INFO` / `WARN` / `ERROR` / `PANIC`）即時過濾檢視、一鍵在檔案總管開啟日誌檔或清空日誌。
+
 ---
 
 ## 專案目錄結構
@@ -91,7 +97,10 @@
 ```text
 rust_file_manager/
 ├── .github/workflows/
+│   ├── ci.yml                    # Pull Request 自動化前端建置與 Rust 單元測試 CI 門檻
 │   └── release.yml               # GitHub Actions 三平台 (Win/Linux/macOS) 自動打包與發布流水線
+├── .githooks/
+│   └── pre-push                  # 本地主幹保護 Hook (禁止直推 main，強制走 PR + CI 流程)
 ├── scripts/                      # 跨平台開發環境安裝與 Release 打包腳本
 │   ├── build-release.ps1         # PowerShell 單一執行檔 (Portable) 與安裝包打包腳本
 │   ├── build-release.sh          # Bash 單一執行檔與安裝包打包腳本
@@ -119,6 +128,7 @@ rust_file_manager/
 │   ├── src/
 │   │   ├── batch_rename.rs       # 批次改名引擎、衝突偵測、兩階段更名與單元測試
 │   │   ├── fs_ops.rs             # Rayon 平行目錄掃描、LRU 快取與 Notify 檔案監聽
+│   │   ├── logger.rs             # JSON Lines 結構化日誌、Panic Hook、Rotation 與設定檔診斷
 │   │   ├── models.rs             # 跨平台路徑正規化與序列化資料結構
 │   │   ├── queue.rs              # 2MB Chunked 非同步檔案複製/搬移/回收桶佇列
 │   │   ├── system_ops.rs         # MD5/SHA256/CRC32 計算、跨平台終端機與壓縮解壓縮

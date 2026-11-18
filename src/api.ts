@@ -7,7 +7,9 @@ import type {
   DirectoryListing,
   FileChecksumResult,
   FilePreviewData,
+  LogFormat,
   QueueRetentionPolicy,
+  StructuredLogRecord,
   SystemLocations,
   TransferConflictItem,
   TransferJobSnapshot,
@@ -229,4 +231,44 @@ export async function apiLoadConfigFile(sourcePath?: string): Promise<string> {
     sourcePath: sourcePath || null,
   });
 }
+
+export async function apiGetLogFilePath(): Promise<string> {
+  if (!isTauriRuntime()) {
+    return "D:/devops_workspace/private/rust_file_manager/logs/rfm.jsonl";
+  }
+  return invoke<string>("cmd_get_log_file_path");
+}
+
+export async function apiReadLogs(limit = 200): Promise<StructuredLogRecord[]> {
+  if (!isTauriRuntime()) return [];
+  return invoke<StructuredLogRecord[]>("cmd_read_logs", { limit });
+}
+
+export async function apiClearLogs(): Promise<void> {
+  if (!isTauriRuntime()) return;
+  return invoke<void>("cmd_clear_logs");
+}
+
+export async function apiSetLogFormat(format: LogFormat): Promise<void> {
+  if (!isTauriRuntime()) return;
+  return invoke<void>("cmd_set_log_format", { format });
+}
+
+export async function apiWriteFrontendLog(
+  level: "INFO" | "WARN" | "ERROR",
+  target: string,
+  event: string,
+  message: string,
+  context?: Record<string, unknown>
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+  return invoke<void>("cmd_write_frontend_log", {
+    level,
+    target,
+    event,
+    message,
+    context: context || null,
+  });
+}
+
 

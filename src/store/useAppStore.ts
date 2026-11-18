@@ -5,6 +5,7 @@ import type {
   DragPayload,
   FontSettings,
   KeybindingItem,
+  LogFormat,
   PaneId,
   QueueRetentionPolicy,
   ShortcutActionId,
@@ -222,6 +223,7 @@ interface AppStoreState {
   showQueueDrawer: boolean;
   conflictStrategy: ConflictStrategy;
   queueRetention: QueueRetentionPolicy;
+  logFormat: LogFormat;
   pendingConflictPrompt: PendingConflictPrompt | null;
   bookmarks: { label: string; path: string }[];
   fontSettings: FontSettings;
@@ -241,6 +243,7 @@ interface AppStoreState {
   setShowQueueDrawer: (show: boolean) => void;
   setConflictStrategy: (strategy: ConflictStrategy) => void;
   updateQueueRetention: (partial: Partial<QueueRetentionPolicy>) => void;
+  setLogFormat: (format: LogFormat) => void;
   setPendingConflictPrompt: (prompt: PendingConflictPrompt | null) => void;
   updateFontSettings: (partial: Partial<FontSettings>) => void;
   updateKeybinding: (id: ShortcutActionId, newCombo: string) => void;
@@ -297,6 +300,7 @@ export const useAppStore = create<AppStoreState>()(
         retentionDays: 7,
         maxEvents: 50,
       },
+      logFormat: "json",
       pendingConflictPrompt: null,
       bookmarks: [],
       fontSettings: {
@@ -336,6 +340,7 @@ export const useAppStore = create<AppStoreState>()(
         set((state) => ({
           queueRetention: { ...state.queueRetention, ...partial },
         })),
+      setLogFormat: (format) => set({ logFormat: format }),
       setPendingConflictPrompt: (prompt) =>
         set({ pendingConflictPrompt: prompt }),
 
@@ -368,6 +373,7 @@ export const useAppStore = create<AppStoreState>()(
             retentionDays: 7,
             maxEvents: 50,
           },
+          logFormat: "json",
           bookmarks: [],
           fontSettings: {
             fontFamily: AVAILABLE_FONTS[0].value,
@@ -767,6 +773,7 @@ export const useAppStore = create<AppStoreState>()(
             showPreviewPanel: state.showPreviewPanel,
             conflictStrategy: state.conflictStrategy,
             queueRetention: state.queueRetention,
+            logFormat: state.logFormat,
             bookmarks: state.bookmarks,
             fontSettings: state.fontSettings,
             keybindings: state.keybindings,
@@ -806,6 +813,10 @@ export const useAppStore = create<AppStoreState>()(
             cfg.queueRetention && typeof cfg.queueRetention === "object"
               ? { ...state.queueRetention, ...cfg.queueRetention }
               : state.queueRetention,
+          logFormat:
+            cfg.logFormat === "json" || cfg.logFormat === "text"
+              ? cfg.logFormat
+              : state.logFormat,
           bookmarks: Array.isArray(cfg.bookmarks)
             ? cfg.bookmarks
             : state.bookmarks,
@@ -887,6 +898,7 @@ export const useAppStore = create<AppStoreState>()(
         showPreviewPanel: state.showPreviewPanel,
         conflictStrategy: state.conflictStrategy,
         queueRetention: state.queueRetention,
+        logFormat: state.logFormat,
         bookmarks: state.bookmarks,
         fontSettings: state.fontSettings,
         keybindings: state.keybindings,

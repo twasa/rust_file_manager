@@ -12,20 +12,32 @@ import {
   Save,
   FolderOpen,
   ExternalLink,
+  TerminalSquare,
+  RefreshCw,
+  Trash2,
 } from "lucide-react";
 import {
+  apiClearLogs,
   apiGetDefaultConfigPath,
+  apiGetLogFilePath,
   apiLoadConfigFile,
+  apiReadLogs,
   apiRevealInShell,
   apiSaveConfigFile,
+  apiSetLogFormat,
 } from "../api";
 import { AVAILABLE_FONTS, useAppStore } from "../store/useAppStore";
 import { keyboardEventToCombo } from "../utils/formatters";
-import type { ConflictStrategy, ShortcutActionId } from "../types";
+import type {
+  ConflictStrategy,
+  LogFormat,
+  ShortcutActionId,
+  StructuredLogRecord,
+} from "../types";
 
 interface SettingsModalProps {
   visible: boolean;
-  initialTab?: "appearance" | "shortcuts" | "queue" | "config";
+  initialTab?: "appearance" | "shortcuts" | "queue" | "config" | "logs";
   onClose: () => void;
   onNotify?: (msg: string) => void;
 }
@@ -37,7 +49,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onNotify,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    "appearance" | "shortcuts" | "queue" | "config"
+    "appearance" | "shortcuts" | "queue" | "config" | "logs"
   >(initialTab);
   const [recordingId, setRecordingId] = useState<ShortcutActionId | null>(null);
   const [customFontInput, setCustomFontInput] = useState("");
@@ -47,6 +59,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     text: string;
   } | null>(null);
   const [confirmResetAll, setConfirmResetAll] = useState(false);
+
+  // 結構化日誌檢視器狀態
+  const [logFilePath, setLogFilePath] = useState("");
+  const [logRecords, setLogRecords] = useState<StructuredLogRecord[]>([]);
+  const [logLevelFilter, setLogLevelFilter] = useState<string>("ALL");
+  const [loadingLogs, setLoadingLogs] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,8 +78,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const setConflictStrategy = useAppStore((s) => s.setConflictStrategy);
   const queueRetention = useAppStore((s) => s.queueRetention);
   const updateQueueRetention = useAppStore((s) => s.updateQueueRetention);
+  const logFormat = useAppStore((s) => s.logFormat);
+  const setLogFormat = useAppStore((s) => s.setLogFormat);
   const exportConfigJson = useAppStore((s) => s.exportConfigJson);
   const importConfigJson = useAppStore((s) => s.importConfigJson);
+
+  const refreshLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const [p, records] = await Promise.all([
+        apiGetLogFilePath(),
+        apiReadLogs(250),
+      ]);
+      setLogFilePath(p);
+      setLogRecords(records.reverse());
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
 
   useEffect(() => {
     if (visible) {
@@ -72,6 +108,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           setConfigPathInput((prev) => prev || p);
         })
         .catch(console.error);
+      refreshLogs();
     }
   }, [visible]);
 
@@ -226,6 +263,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <FileJson size={15} />
             <span>設定檔匯出 / 匯入 (.json)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("logs");
+              refreshLogs();
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 border-b-2 font-medium transition-colors shrink-0 ${
+              activeTab === "logs"
+                ? "border-amber-500 text-amber-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <TerminalSquare size={15} />
+            <span>系統診斷日誌 (JSON Logs)</span>
           </button>
         </div>
 
@@ -785,6 +837,161 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <pre className="max-h-44 overflow-y-auto text-[11px] font-mono text-slate-300 whitespace-pre-wrap select-text">
                   {exportConfigJson()}
                 </pre>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "logs" && (
+            <div className="space-y-4">
+              {/* 日誌輸出格式設定與檔案位置 */}
+              <div className="p-4 rounded-lg bg-slate-950/70 border border-slate-800 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="font-semibold text-slate-200">
+                      結構化日誌格式與持久化路徑 (Structured Logging)
+                    </div>
+                    <p className="text-slate-400 mt-0.5">
+                      預設採用 <strong>JSON Lines (`.jsonl`)</strong> 格式寫入磁碟（單檔上限 5 MB 自動輪替），可直接透過{" "}
+                      <code className="text-amber-300">jq</code>、Loki、ELK 或 Datadog 收集查詢。當設定檔損毀或發生未預期 Panic 時亦會自動記錄行號與備份路徑。
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-lg border border-slate-700 shrink-0">
+                    {(
+                      [
+                        { id: "json", label: "JSON Lines (推薦)" },
+                        { id: "text", label: "Plain Text" },
+                      ] as { id: LogFormat; label: string }[]
+                    ).map((fmt) => (
+                      <button
+                        key={fmt.id}
+                        type="button"
+                        onClick={async () => {
+                          setLogFormat(fmt.id);
+                          await apiSetLogFormat(fmt.id);
+                          await refreshLogs();
+                          onNotify?.(`日誌格式已切換為 ${fmt.label}`);
+                        }}
+                        className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                          logFormat === fmt.id
+                            ? "bg-amber-500 text-slate-950 font-semibold"
+                            : "text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        {fmt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+                  <div className="font-mono text-[11px] text-slate-300 truncate">
+                    日誌檔路徑：<span className="text-amber-300">{logFilePath}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (logFilePath) apiRevealInShell(logFilePath).catch(() => {});
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
+                    >
+                      <ExternalLink size={12} />
+                      <span>在檔案總管開啟</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={refreshLogs}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
+                    >
+                      <RefreshCw
+                        size={12}
+                        className={loadingLogs ? "animate-spin text-blue-400" : ""}
+                      />
+                      <span>重新整理</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await apiClearLogs();
+                        await refreshLogs();
+                        onNotify?.("已清空日誌記錄");
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300"
+                    >
+                      <Trash2 size={12} />
+                      <span>清空日誌</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 等級過濾列 */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  {["ALL", "INFO", "WARN", "ERROR", "PANIC"].map((lv) => (
+                    <button
+                      key={lv}
+                      type="button"
+                      onClick={() => setLogLevelFilter(lv)}
+                      className={`px-2.5 py-1 rounded text-[11px] font-mono font-medium ${
+                        logLevelFilter === lv
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-950 border border-slate-800 text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {lv}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  顯示最近 {logRecords.length} 筆事件
+                </span>
+              </div>
+
+              {/* JSON 日誌清單檢視器 */}
+              <div className="max-h-72 overflow-y-auto rounded-lg bg-slate-950 border border-slate-800 p-3 space-y-1.5 font-mono text-[11px] select-text">
+                {logRecords
+                  .filter(
+                    (r) =>
+                      logLevelFilter === "ALL" ||
+                      r.level.toUpperCase() === logLevelFilter
+                  )
+                  .map((rec, idx) => (
+                    <div
+                      key={`${rec.timestamp}_${idx}`}
+                      className="p-2 rounded bg-slate-900/80 border border-slate-800/80 break-all"
+                    >
+                      {logFormat === "json" ? (
+                        <span className="text-slate-300">
+                          {JSON.stringify(rec)}
+                        </span>
+                      ) : (
+                        <div>
+                          <span className="text-slate-500">{rec.timestamp} </span>
+                          <span
+                            className={
+                              rec.level === "ERROR" || rec.level === "PANIC"
+                                ? "text-rose-400 font-bold"
+                                : rec.level === "WARN"
+                                ? "text-amber-400 font-semibold"
+                                : "text-emerald-400"
+                            }
+                          >
+                            [{rec.level}]
+                          </span>{" "}
+                          <span className="text-cyan-400">[{rec.target}]</span>{" "}
+                          <span className="text-slate-200">{rec.message}</span>
+                          {rec.context && (
+                            <span className="text-slate-400">
+                              {" "}
+                              {JSON.stringify(rec.context)}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
               </div>
             </div>
           )}
