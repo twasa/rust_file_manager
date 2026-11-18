@@ -251,6 +251,63 @@ fn cmd_clear_cache(state: State<'_, AppState>) {
     state.cache.clear_all();
 }
 
+/// 取得跨平台預設設定檔路徑（優先檢查執行檔同目錄是否有 portable 設定檔，否則存放於系統設定目錄 ~/.config/rust-file-manager/settings.json）
+fn resolve_default_config_file() -> PathBuf {
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let portable_cfg = exe_dir.join("rfm-settings.json");
+            if portable_cfg.exists() {
+                return portable_cfg;
+            }
+        }
+    }
+    let base = dirs::config_dir()
+        .or_else(dirs::home_dir)
+        .unwrap_or_else(|| PathBuf::from("."));
+    base.join("rust-file-manager").join("settings.json")
+}
+
+#[tauri::command]
+fn cmd_get_default_config_path() -> String {
+    normalize_path_str(&resolve_default_config_file())
+}
+
+#[tauri::command]
+fn cmd_save_config_file(target_path: Option<String>, content: String) -> Result<String, String> {
+    let path = match target_path {
+        Some(p) if !p.trim().is_empty() => PathBuf::from(p.trim()),
+        _ => resolve_default_config_file(),
+    };
+    // 驗證是否為合法 JSON
+    let parsed: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("設定檔 JSON 格式無效: {}", e))?;
+    let pretty =
+        serde_json::to_string_pretty(&parsed).map_err(|e| format!("格式化 JSON 失敗: {}", e))?;
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("無法建立設定檔目錄: {}", e))?;
+    }
+    fs::write(&path, pretty).map_err(|e| format!("寫入設定檔失敗 ({}): {}", path.display(), e))?;
+    Ok(normalize_path_str(&path))
+}
+
+#[tauri::command]
+fn cmd_load_config_file(source_path: Option<String>) -> Result<String, String> {
+    let path = match source_path {
+        Some(p) if !p.trim().is_empty() => PathBuf::from(p.trim()),
+        _ => resolve_default_config_file(),
+    };
+    if !path.exists() {
+        return Err(format!("設定檔不存在: {}", normalize_path_str(&path)));
+    }
+    let raw = fs::read_to_string(&path)
+        .map_err(|e| format!("讀取設定檔失敗 ({}): {}", path.display(), e))?;
+    // 驗證 JSON 語法
+    let _: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("設定檔不是有效的 JSON: {}", e))?;
+    Ok(raw)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let cache = FsCacheState::new(128);
@@ -286,6 +343,9 @@ pub fn run() {
             cmd_extract_archive,
             cmd_compress_to_zip,
             cmd_clear_cache,
+            cmd_get_default_config_path,
+            cmd_save_config_file,
+            cmd_load_config_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

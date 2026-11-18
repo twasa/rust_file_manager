@@ -253,6 +253,10 @@ interface AppStoreState {
   setTransferJobs: (jobs: TransferJobSnapshot[]) => void;
   setLastUndoRenamePairs: (pairs: [string, string][]) => void;
   triggerRefresh: () => void;
+
+  // Config Export / Import
+  exportConfigJson: () => string;
+  importConfigJson: (jsonString: string) => void;
 }
 
 const initialLeftTab = createNewTab("D:/devops_workspace", "#3b82f6");
@@ -691,6 +695,69 @@ export const useAppStore = create<AppStoreState>()(
       setLastUndoRenamePairs: (pairs) => set({ lastUndoRenamePairs: pairs }),
       triggerRefresh: () =>
         set((state) => ({ refreshVersion: state.refreshVersion + 1 })),
+
+      exportConfigJson: () => {
+        const state = get();
+        const payload = {
+          app: "rust-file-manager",
+          schemaVersion: 1,
+          exportedAt: new Date().toISOString(),
+          settings: {
+            dualPaneEnabled: state.dualPaneEnabled,
+            showHiddenFiles: state.showHiddenFiles,
+            showPreviewPanel: state.showPreviewPanel,
+            conflictStrategy: state.conflictStrategy,
+            bookmarks: state.bookmarks,
+            fontSettings: state.fontSettings,
+            keybindings: state.keybindings,
+            panes: state.panes,
+          },
+        };
+        return JSON.stringify(payload, null, 2);
+      },
+
+      importConfigJson: (jsonString) => {
+        const parsed = JSON.parse(jsonString);
+        const cfg = parsed?.settings ? parsed.settings : parsed;
+        if (!cfg || typeof cfg !== "object") {
+          throw new Error("設定檔格式不正確，缺少有效設定物件");
+        }
+        set((state) => ({
+          dualPaneEnabled:
+            typeof cfg.dualPaneEnabled === "boolean"
+              ? cfg.dualPaneEnabled
+              : state.dualPaneEnabled,
+          showHiddenFiles:
+            typeof cfg.showHiddenFiles === "boolean"
+              ? cfg.showHiddenFiles
+              : state.showHiddenFiles,
+          showPreviewPanel:
+            typeof cfg.showPreviewPanel === "boolean"
+              ? cfg.showPreviewPanel
+              : state.showPreviewPanel,
+          conflictStrategy:
+            cfg.conflictStrategy === "overwrite" ||
+            cfg.conflictStrategy === "skip" ||
+            cfg.conflictStrategy === "rename"
+              ? cfg.conflictStrategy
+              : state.conflictStrategy,
+          bookmarks: Array.isArray(cfg.bookmarks)
+            ? cfg.bookmarks
+            : state.bookmarks,
+          fontSettings:
+            cfg.fontSettings && typeof cfg.fontSettings === "object"
+              ? { ...state.fontSettings, ...cfg.fontSettings }
+              : state.fontSettings,
+          keybindings: Array.isArray(cfg.keybindings)
+            ? cfg.keybindings
+            : state.keybindings,
+          panes:
+            cfg.panes && cfg.panes.left && cfg.panes.right
+              ? cfg.panes
+              : state.panes,
+          refreshVersion: state.refreshVersion + 1,
+        }));
+      },
     }),
     {
       name: "rust_file_manager_settings_v1",

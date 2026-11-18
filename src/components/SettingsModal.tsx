@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Type,
   Keyboard,
@@ -6,27 +6,48 @@ import {
   RotateCcw,
   ShieldCheck,
   Check,
+  FileJson,
+  Download,
+  Upload,
+  Save,
+  FolderOpen,
+  ExternalLink,
 } from "lucide-react";
+import {
+  apiGetDefaultConfigPath,
+  apiLoadConfigFile,
+  apiRevealInShell,
+  apiSaveConfigFile,
+} from "../api";
 import { AVAILABLE_FONTS, useAppStore } from "../store/useAppStore";
 import { keyboardEventToCombo } from "../utils/formatters";
 import type { ConflictStrategy, ShortcutActionId } from "../types";
 
 interface SettingsModalProps {
   visible: boolean;
-  initialTab?: "appearance" | "shortcuts" | "queue";
+  initialTab?: "appearance" | "shortcuts" | "queue" | "config";
   onClose: () => void;
+  onNotify?: (msg: string) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   visible,
   initialTab = "appearance",
   onClose,
+  onNotify,
 }) => {
-  const [activeTab, setActiveTab] = useState<"appearance" | "shortcuts" | "queue">(
-    initialTab
-  );
+  const [activeTab, setActiveTab] = useState<
+    "appearance" | "shortcuts" | "queue" | "config"
+  >(initialTab);
   const [recordingId, setRecordingId] = useState<ShortcutActionId | null>(null);
   const [customFontInput, setCustomFontInput] = useState("");
+  const [configPathInput, setConfigPathInput] = useState("");
+  const [configStatusMsg, setConfigStatusMsg] = useState<{
+    type: "ok" | "err";
+    text: string;
+  } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fontSettings = useAppStore((s) => s.fontSettings);
   const updateFontSettings = useAppStore((s) => s.updateFontSettings);
@@ -35,17 +56,111 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const resetKeybindings = useAppStore((s) => s.resetKeybindings);
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
   const setConflictStrategy = useAppStore((s) => s.setConflictStrategy);
+  const exportConfigJson = useAppStore((s) => s.exportConfigJson);
+  const importConfigJson = useAppStore((s) => s.importConfigJson);
+
+  useEffect(() => {
+    if (visible) {
+      setConfigStatusMsg(null);
+      apiGetDefaultConfigPath()
+        .then((p) => {
+          setConfigPathInput((prev) => prev || p);
+        })
+        .catch(console.error);
+    }
+  }, [visible]);
 
   if (!visible) return null;
 
+  // 1. 透過 Rust 後端儲存 JSON 設定檔至指定磁碟路徑
+  const handleSaveToDisk = async () => {
+    try {
+      const jsonStr = exportConfigJson();
+      const savedPath = await apiSaveConfigFile(jsonStr, configPathInput);
+      setConfigPathInput(savedPath);
+      setConfigStatusMsg({
+        type: "ok",
+        text: `已成功匯出設定檔至磁碟：${savedPath}`,
+      });
+      onNotify?.(`設定檔已匯出至 ${savedPath}`);
+    } catch (err) {
+      setConfigStatusMsg({
+        type: "err",
+        text: `匯出失敗：${String(err)}`,
+      });
+    }
+  };
+
+  // 2. 透過 Rust 後端從指定磁碟路徑讀取並匯入 JSON 設定檔
+  const handleLoadFromDisk = async () => {
+    try {
+      const rawJson = await apiLoadConfigFile(configPathInput);
+      importConfigJson(rawJson);
+      setConfigStatusMsg({
+        type: "ok",
+        text: `已成功從磁碟載入並套用設定檔：${configPathInput}`,
+      });
+      onNotify?.("已成功匯入並套用設定檔！");
+    } catch (err) {
+      setConfigStatusMsg({
+        type: "err",
+        text: `匯入失敗：${String(err)}`,
+      });
+    }
+  };
+
+  // 3. 瀏覽器/檔案選擇器直接下載 .json 備份檔
+  const handleDownloadJsonFile = () => {
+    const jsonStr = exportConfigJson();
+    const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    a.href = url;
+    a.download = `rfm-settings-${dateTag}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setConfigStatusMsg({
+      type: "ok",
+      text: `已觸發下載設定檔備份 (rfm-settings-${dateTag}.json)`,
+    });
+  };
+
+  // 4. 從本機檔案選擇器挑選任意 .json 匯入
+  const handleUploadJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const content = String(ev.target?.result || "");
+        importConfigJson(content);
+        setConfigStatusMsg({
+          type: "ok",
+          text: `已成功從「${file.name}」匯入所有偏好設定、書籤、分頁與快捷鍵！`,
+        });
+        onNotify?.(`已匯入設定檔：${file.name}`);
+      } catch (err) {
+        setConfigStatusMsg({
+          type: "err",
+          text: `解析設定檔失敗：${String(err)}`,
+        });
+      }
+    };
+    reader.readAsText(file, "utf-8");
+    e.target.value = "";
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-3xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+      <div className="w-full max-w-3xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col max-h-[86vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-slate-950/60">
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-semibold text-white">
-              偏好設定與自訂鍵盤快速鍵
+              偏好設定、自訂快速鍵與設定檔匯出/匯入
             </h2>
           </div>
           <button
@@ -58,35 +173,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 px-5 pt-3 border-b border-slate-800 bg-slate-950/30 text-xs">
+        <div className="flex items-center gap-1 px-5 pt-3 border-b border-slate-800 bg-slate-950/30 text-xs overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab("appearance")}
-            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3.5 py-2 border-b-2 font-medium transition-colors shrink-0 ${
               activeTab === "appearance"
                 ? "border-blue-500 text-blue-400"
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
             <Type size={15} />
-            <span>字形與字體大小 (Typography)</span>
+            <span>字形與字體大小</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("shortcuts")}
-            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3.5 py-2 border-b-2 font-medium transition-colors shrink-0 ${
               activeTab === "shortcuts"
                 ? "border-blue-500 text-blue-400"
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
             <Keyboard size={15} />
-            <span>自定義鍵盤快速鍵 (Keybindings)</span>
+            <span>自定義鍵盤快速鍵</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("queue")}
-            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3.5 py-2 border-b-2 font-medium transition-colors shrink-0 ${
               activeTab === "queue"
                 ? "border-blue-500 text-blue-400"
                 : "border-transparent text-slate-400 hover:text-slate-200"
@@ -94,6 +209,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <ShieldCheck size={15} />
             <span>檔案佇列與衝突策略</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("config")}
+            className={`flex items-center gap-2 px-3.5 py-2 border-b-2 font-medium transition-colors shrink-0 ${
+              activeTab === "config"
+                ? "border-emerald-500 text-emerald-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <FileJson size={15} />
+            <span>設定檔匯出 / 匯入 (.json)</span>
           </button>
         </div>
 
@@ -366,6 +493,130 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
           )}
+
+          {activeTab === "config" && (
+            <div className="space-y-5">
+              {configStatusMsg && (
+                <div
+                  className={`p-3 rounded-lg border text-xs ${
+                    configStatusMsg.type === "ok"
+                      ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                      : "bg-rose-500/15 border-rose-500/40 text-rose-300"
+                  }`}
+                >
+                  {configStatusMsg.text}
+                </div>
+              )}
+
+              {/* 方式一：磁碟固定路徑讀寫 (支援跨平台設定目錄或 Portable 模式) */}
+              <div className="p-4 rounded-lg bg-slate-950/70 border border-slate-800 space-y-3">
+                <div className="font-semibold text-slate-200 flex items-center gap-2">
+                  <Save size={15} className="text-emerald-400" />
+                  <span>1. 直接儲存 / 載入本機設定檔路徑 (支援 Portable 隨身碟攜帶)</span>
+                </div>
+                <p className="text-slate-400 leading-relaxed">
+                  可將您的<strong>字型與大小、自訂鍵盤快速鍵、書籤捷徑、已鎖定與設色分頁、雙欄狀態</strong>直接寫入指定的{" "}
+                  <code className="text-emerald-300">.json</code>{" "}
+                  設定檔路徑。若將檔案命名為{" "}
+                  <code className="text-amber-300">rfm-settings.json</code>{" "}
+                  放在執行檔同目錄，即可作為免安裝隨身攜帶設定檔。
+                </p>
+
+                <div className="space-y-2 pt-1">
+                  <label className="block text-[11px] text-slate-400">
+                    目標設定檔完整路徑：
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={configPathInput}
+                      onChange={(e) => setConfigPathInput(e.target.value)}
+                      placeholder="例如: D:/devops_workspace/private/rust_file_manager/rfm-settings.json"
+                      className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono text-xs focus:border-blue-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (configPathInput) apiRevealInShell(configPathInput).catch(() => {});
+                      }}
+                      className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                      title="在系統檔案總管中顯示此設定檔"
+                    >
+                      <ExternalLink size={14} />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveToDisk}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
+                    >
+                      <Save size={14} />
+                      <span>匯出寫入此路徑</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLoadFromDisk}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium"
+                    >
+                      <FolderOpen size={14} />
+                      <span>從此路徑讀取匯入</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 方式二：透過檔案選擇器任意匯出下載 / 挑選檔案匯入 */}
+              <div className="p-4 rounded-lg bg-slate-950/70 border border-slate-800 space-y-3">
+                <div className="font-semibold text-slate-200 flex items-center gap-2">
+                  <FileJson size={15} className="text-blue-400" />
+                  <span>2. 透過檔案對話框匯出備份或選擇任意設定檔匯入</span>
+                </div>
+                <p className="text-slate-400">
+                  方便您將設定檔備份分享至其他電腦（Windows / Linux / macOS 格式完全相容）。
+                </p>
+
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleDownloadJsonFile}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium"
+                  >
+                    <Download size={14} className="text-emerald-400" />
+                    <span>下載設定檔備份 (.json)</span>
+                  </button>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={handleUploadJsonFile}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium"
+                  >
+                    <Upload size={14} className="text-blue-400" />
+                    <span>瀏覽並選擇 .json 設定檔匯入...</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 目前設定檔 JSON 內容即時預覽 */}
+              <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800">
+                <div className="text-[11px] text-slate-400 mb-2 flex justify-between">
+                  <span>目前設定檔 JSON 結構預覽：</span>
+                  <span className="font-mono text-slate-500">schemaVersion: 1</span>
+                </div>
+                <pre className="max-h-44 overflow-y-auto text-[11px] font-mono text-slate-300 whitespace-pre-wrap select-text">
+                  {exportConfigJson()}
+                </pre>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -375,7 +626,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onClick={onClose}
             className="px-5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs text-white font-medium"
           >
-            完成並儲存
+            完成並關閉
           </button>
         </div>
       </div>

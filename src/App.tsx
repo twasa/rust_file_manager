@@ -95,7 +95,7 @@ export const App: React.FC = () => {
   const [batchRenameTargets, setBatchRenameTargets] = useState<FileEntry[]>([]);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<
-    "appearance" | "shortcuts" | "queue"
+    "appearance" | "shortcuts" | "queue" | "config"
   >("appearance");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -899,6 +899,7 @@ export const App: React.FC = () => {
         visible={settingsModalOpen}
         initialTab={settingsInitialTab}
         onClose={() => setSettingsModalOpen(false)}
+        onNotify={notify}
       />
     </div>
   );

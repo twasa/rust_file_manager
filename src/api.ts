@@ -185,3 +185,27 @@ export async function apiCompressToZip(
 export async function apiClearCache(): Promise<void> {
   return invoke<void>("cmd_clear_cache");
 }
+
+export async function apiGetDefaultConfigPath(): Promise<string> {
+  if (!isTauriRuntime()) {
+    return "D:/devops_workspace/private/rust_file_manager/rfm-settings.json";
+  }
+  return invoke<string>("cmd_get_default_config_path");
+}
+
+export async function apiSaveConfigFile(
+  content: string,
+  targetPath?: string
+): Promise<string> {
+  return invoke<string>("cmd_save_config_file", {
+    targetPath: targetPath || null,
+    content,
+  });
+}
+
+export async function apiLoadConfigFile(sourcePath?: string): Promise<string> {
+  return invoke<string>("cmd_load_config_file", {
+    sourcePath: sourcePath || null,
+  });
+}
+
