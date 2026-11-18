@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "setup:ps1": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup-dev-env.ps1",
+    "setup:sh": "bash ./scripts/setup-dev-env.sh",
+    "check:env": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup-dev-env.ps1 -CheckOnly",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

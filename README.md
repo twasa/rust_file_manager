@@ -72,6 +72,9 @@
 
 ```text
 rust_file_manager/
+├── scripts/                      # 跨平台定版開發環境自動化安裝腳本
+│   ├── setup-dev-env.ps1         # PowerShell 7+ 安裝腳本 (Windows / Linux / macOS)
+│   └── setup-dev-env.sh          # Bash / Zsh 安裝腳本 (Linux / macOS / Windows Git Bash)
 ├── src/                          # React 18 + TypeScript 前端原始碼
 │   ├── components/
 │   │   ├── BatchRenameModal.tsx  # 進階批次重新命名工具 (Regex/流水號/即時預覽)
@@ -107,9 +110,44 @@ rust_file_manager/
 
 ---
 
-## 開發與建置指令 (PowerShell 7 / Zsh 通用)
+## 開發環境自動化定版安裝與建置指令 (Windows / Linux / macOS)
 
-### 1. 安裝前端依賴
+本專案於 `scripts/` 目錄下提供支援三大作業系統（Microsoft Windows、Linux、macOS）的 **PowerShell (`setup-dev-env.ps1`)** 與 **Bash (`setup-dev-env.sh`)** 自動化環境安裝腳本。所有核心工具鏈版本均設為可覆寫變數並預設鎖定於官方發行的穩定版本：
+
+| 工具鏈項目 | 變數名稱 (Bash / PowerShell) | 預設定版版本 (Official Stable) |
+| :--- | :--- | :--- |
+| **Rust 工具鏈 (`rustup` / `rustc`)** | `RUST_VERSION` / `-RustVersion` | `1.100.0` |
+| **Node.js LTS 執行環境** | `NODE_VERSION` / `-NodeVersion` | `26.13.1` |
+| **Fast Node Manager (`fnm`)** | `FNM_VERSION` / `-FnmVersion` | `1.39.0` |
+| **Tauri 2.x CLI (`@tauri-apps/cli`)** | `TAURI_CLI_VERSION` / `-TauriCliVersion` | `2.2.0` |
+
+### 0. 一鍵自動化安裝開發環境
+
+#### PowerShell 7 (`pwsh` — Windows / Linux / macOS 通用)
+```powershell
+# 使用預設官方穩定版本一鍵安裝系統依賴、Rust、fnm、Node.js 與 npm 套件
+./scripts/setup-dev-env.ps1
+
+# 僅檢查目前系統環境與版本 (不進行安裝)
+./scripts/setup-dev-env.ps1 -CheckOnly
+
+# 自訂指定目標版本進行安裝
+./scripts/setup-dev-env.ps1 -RustVersion "1.100.0" -NodeVersion "26.13.1" -FnmVersion "1.39.0"
+```
+
+#### Bash / Zsh (Linux `apt`/`dnf`/`pacman`、macOS `xcode-select`、Windows Git Bash)
+```bash
+# 使用預設官方穩定版本一鍵安裝 (Linux 會自動安裝 webkit2gtk-4.1 等 Tauri 2.x 系統依賴)
+./scripts/setup-dev-env.sh
+
+# 僅檢查目前系統環境與版本
+./scripts/setup-dev-env.sh --check-only
+
+# 透過環境變數覆寫定版版本號
+RUST_VERSION="1.100.0" NODE_VERSION="26.13.1" FNM_VERSION="1.39.0" ./scripts/setup-dev-env.sh
+```
+
+### 1. 手動安裝前端依賴
 ```powershell
 npm install
 ```

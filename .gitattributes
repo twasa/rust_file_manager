@@ -1,0 +1,3 @@
+# 確保 Shell 腳本永遠維持 LF 換行符號，避免在 Linux / macOS 或容器中執行時出現 \r 錯誤
+*.sh text eol=lf
+*.ps1 text eol=crlf
