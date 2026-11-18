@@ -130,7 +130,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           磁碟區與儲存空間
         </div>
         <div className="space-y-2">
-          {systemLocations?.volumes.map((vol) => {
+          {[...(systemLocations?.volumes || [])]
+            .sort((a, b) =>
+              a.mountPoint.localeCompare(b.mountPoint, undefined, {
+                numeric: true,
+                sensitivity: "base",
+              })
+            )
+            .map((vol) => {
             const used = Math.max(0, vol.totalSpace - vol.availableSpace);
             const pct =
               vol.totalSpace > 0

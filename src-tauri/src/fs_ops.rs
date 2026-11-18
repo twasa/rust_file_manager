@@ -365,9 +365,9 @@ fn enumerate_windows_logical_volumes(existing: &[VolumeInfo]) -> Vec<VolumeInfo>
         }
 
         let display_name = if vol_label.trim().is_empty() {
-            format!("本機磁碟 ({}:)", letter)
+            format!("{}: (本機磁碟)", letter)
         } else {
-            format!("{} ({}:)", vol_label.trim(), letter)
+            format!("{}: ({})", letter, vol_label.trim())
         };
 
         result.push(VolumeInfo {
@@ -380,7 +380,11 @@ fn enumerate_windows_logical_volumes(existing: &[VolumeInfo]) -> Vec<VolumeInfo>
         });
     }
 
-    result.sort_by(|a, b| a.mount_point.cmp(&b.mount_point));
+    result.sort_by(|a, b| {
+        a.mount_point
+            .to_ascii_uppercase()
+            .cmp(&b.mount_point.to_ascii_uppercase())
+    });
     result
 }
 
@@ -392,10 +396,18 @@ pub fn get_system_locations() -> SystemLocations {
     for disk in disks.list() {
         let mount = normalize_path_str(disk.mount_point());
         let name = disk.name().to_string_lossy().to_string();
+        let trimmed_mount = mount.trim_end_matches('/');
         let display_name = if name.trim().is_empty() {
-            mount.clone()
+            #[cfg(target_os = "windows")]
+            {
+                format!("{} (本機磁碟)", trimmed_mount.to_ascii_uppercase())
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                mount.clone()
+            }
         } else {
-            format!("{} ({})", name, mount.trim_end_matches('/'))
+            format!("{} ({})", trimmed_mount.to_ascii_uppercase(), name.trim())
         };
 
         volumes.push(VolumeInfo {
@@ -412,6 +424,12 @@ pub fn get_system_locations() -> SystemLocations {
     {
         volumes = enumerate_windows_logical_volumes(&volumes);
     }
+
+    volumes.sort_by(|a, b| {
+        a.mount_point
+            .to_ascii_uppercase()
+            .cmp(&b.mount_point.to_ascii_uppercase())
+    });
 
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"));
     let home_str = normalize_path_str(&home);
