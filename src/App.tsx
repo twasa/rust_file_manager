@@ -27,10 +27,12 @@ import {
   apiExtractArchive,
   apiGetSystemLocations,
   apiListTransferJobs,
+  apiLoadConfigFile,
   apiOpenItem,
   apiOpenTerminal,
   apiRevealInShell,
   apiSetLogFormat,
+  apiSetLogLevel,
   apiSetQueueRetention,
   apiUndoBatchRename,
   apiWriteFrontendLog,
@@ -67,6 +69,7 @@ export const App: React.FC = () => {
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
   const queueRetention = useAppStore((s) => s.queueRetention);
   const logFormat = useAppStore((s) => s.logFormat);
+  const logLevel = useAppStore((s) => s.logLevel);
   const setPendingConflictPrompt = useAppStore(
     (s) => s.setPendingConflictPrompt
   );
@@ -144,10 +147,25 @@ export const App: React.FC = () => {
     document.body.style.fontFamily = fontSettings.fontFamily;
   }, [fontSettings.fontFamily, fontSettings.uiFontSizePx]);
 
-  // 同步日誌格式設定並攔截前端全域未處理錯誤寫入後端結構化日誌檔
+  // 初次掛載時自動從磁碟載入 settings.json (若存在)
+  useEffect(() => {
+    apiLoadConfigFile()
+      .then((rawJson) => {
+        if (rawJson) {
+          useAppStore.getState().importConfigJson(rawJson);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // 同步日誌格式與記錄等級設定並攔截前端全域未處理錯誤寫入後端結構化日誌檔
   useEffect(() => {
     apiSetLogFormat(logFormat).catch(console.error);
   }, [logFormat]);
+
+  useEffect(() => {
+    apiSetLogLevel(logLevel).catch(console.error);
+  }, [logLevel]);
 
   useEffect(() => {
     const onWindowError = (event: ErrorEvent) => {

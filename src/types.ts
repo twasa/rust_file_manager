@@ -224,6 +224,7 @@ export interface DragPayload {
 }
 
 export type LogFormat = "json" | "text";
+export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export interface StructuredLogRecord {
   timestamp: string;

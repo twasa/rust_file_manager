@@ -24,6 +24,45 @@ impl Default for LogFormat {
     }
 }
 
+/// 日誌等級（預設為 ERROR，僅記錄 ERROR 與 PANIC 嚴重等級，避免產生大量雜訊）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogLevel {
+    Debug = 0,
+    Info = 1,
+    Warn = 2,
+    Error = 3,
+    Panic = 4,
+}
+
+impl Default for LogLevel {
+    fn default() -> Self {
+        LogLevel::Error
+    }
+}
+
+impl LogLevel {
+    pub fn parse_str(s: &str) -> Self {
+        match s.trim().to_ascii_uppercase().as_str() {
+            "DEBUG" => LogLevel::Debug,
+            "INFO" => LogLevel::Info,
+            "WARN" | "WARNING" => LogLevel::Warn,
+            "PANIC" | "FATAL" => LogLevel::Panic,
+            _ => LogLevel::Error,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            LogLevel::Debug => "DEBUG",
+            LogLevel::Info => "INFO",
+            LogLevel::Warn => "WARN",
+            LogLevel::Error => "ERROR",
+            LogLevel::Panic => "PANIC",
+        }
+    }
+}
+
 /// 單筆結構化日誌記錄
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +80,7 @@ pub struct StructuredLogRecord {
 
 pub struct AppLogger {
     format: Mutex<LogFormat>,
+    level: Mutex<LogLevel>,
     write_lock: Mutex<()>,
     log_path: PathBuf,
 }
@@ -51,25 +91,12 @@ impl AppLogger {
         let _ = fs::create_dir_all(&log_dir);
         let log_path = log_dir.join("rfm.jsonl");
 
-        let logger = Arc::new(Self {
+        Arc::new(Self {
             format: Mutex::new(LogFormat::Json),
+            level: Mutex::new(LogLevel::Error),
             write_lock: Mutex::new(()),
             log_path,
-        });
-
-        logger.log(
-            "INFO",
-            "backend::startup",
-            "app_initialized",
-            "Rust File Manager 日誌系統已啟動 (預設格式: JSON Lines)",
-            Some(json!({
-                "version": env!("CARGO_PKG_VERSION"),
-                "os": std::env::consts::OS,
-                "arch": std::env::consts::ARCH
-            })),
-        );
-
-        logger
+        })
     }
 
     pub fn install_panic_hook(logger: Arc<Self>) {
@@ -117,6 +144,14 @@ impl AppLogger {
         *self.format.lock()
     }
 
+    pub fn set_level(&self, level: LogLevel) {
+        *self.level.lock() = level;
+    }
+
+    pub fn get_level(&self) -> LogLevel {
+        *self.level.lock()
+    }
+
     pub fn get_log_path_str(&self) -> String {
         normalize_path_str(&self.log_path)
     }
@@ -129,6 +164,11 @@ impl AppLogger {
         message: &str,
         context: Option<Value>,
     ) {
+        let rec_level = LogLevel::parse_str(level);
+        if rec_level < *self.level.lock() {
+            return;
+        }
+
         let record = StructuredLogRecord {
             timestamp: Utc::now().to_rfc3339(),
             level: level.to_ascii_uppercase(),
@@ -240,18 +280,21 @@ impl AppLogger {
     }
 }
 
-fn resolve_log_directory() -> PathBuf {
+/// 取得應用程式主要基底目錄（優先使用 .exe 同目錄以達成免安裝 Portable 設計，否則使用系統設定目錄）
+pub fn resolve_app_directory() -> PathBuf {
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
-            if exe_dir.join("rfm-settings.json").exists() {
-                return exe_dir.join("logs");
-            }
+            return exe_dir.to_path_buf();
         }
     }
     let base = dirs::config_dir()
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("rust-file-manager").join("logs")
+    base.join("rust-file-manager")
+}
+
+pub fn resolve_log_directory() -> PathBuf {
+    resolve_app_directory().join("logs")
 }
 
 /// 驗證設定檔 JSON 結構並在發現異常欄位時回傳診斷警告清單
@@ -293,6 +336,19 @@ pub fn diagnose_config_value(val: &Value) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_log_level_ordering_and_filtering() {
+        assert!(LogLevel::Debug < LogLevel::Info);
+        assert!(LogLevel::Info < LogLevel::Warn);
+        assert!(LogLevel::Warn < LogLevel::Error);
+        assert!(LogLevel::Error < LogLevel::Panic);
+
+        assert_eq!(LogLevel::parse_str("error"), LogLevel::Error);
+        assert_eq!(LogLevel::parse_str("info"), LogLevel::Info);
+        assert_eq!(LogLevel::parse_str("unknown"), LogLevel::Error);
+        assert_eq!(LogLevel::default(), LogLevel::Error);
+    }
 
     #[test]
     fn test_structured_json_logger_and_config_diagnosis() {

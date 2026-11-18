@@ -27,7 +27,7 @@
 - 支援獨立調整 **「檔案列表字體大小 (`11px ~ 24px`)」**、**「全域 UI 介面字體大小 (`11px ~ 22px`)」** 以及 **「虛擬列表列高 (`26px ~ 58px`)」**（頂部工具列 `A-` / `A+` 按鈕可同步縮放檔案列表與 UI 字體）。
 - **跨平台設定檔匯出與匯入 (`.json`)**：
   - 於「設定與快捷鍵 -> **設定檔匯出 / 匯入 (.json)**」分頁中，支援一鍵將**字型設定、自定義鍵盤快速鍵、書籤捷徑、雙欄狀態、所有分頁（含鎖定狀態與顏色標籤）及佇列衝突策略**完整匯出為標準 JSON 設定檔，或從任意 `.json` 備份檔匯入還原。
-  - **Portable 隨身碟攜帶支援**：支援直接讀寫本機設定檔路徑（預設為系統設定目錄 `rust-file-manager/settings.json`，若在單一執行檔同目錄放置 `rfm-settings.json` 則自動優先識別為 Portable 設定檔）。
+  - **Portable 隨身碟攜帶支援**：設定檔（`settings.json`）與日誌目錄（`logs/`）預設與執行檔（`.exe`）存放於同一層目錄，初次執行時若不存在即自動建立，實現真正的綠色免安裝與零設定搬移。同時相容自訂路徑與既有 `rfm-settings.json`。
   - **一鍵恢復所有出廠預設值**：設定視窗左下角提供「將所有設定恢復預設值」按鈕（附二次確認防呆），可一鍵將字型、快速鍵、佇列保留策略與面板狀態全部重置。
 
 ### 5. 智慧感知右鍵功能表 (`src/components/ContextMenu.tsx`)
@@ -85,10 +85,11 @@
 - **設定檔讀寫副檔名與容量保護 (`src-tauri/src/lib.rs`)**：強制限制設定檔讀寫路徑必須為 `.json` 副檔名且不超過 `5 MB`，並於預覽面板限制最多讀取前 `32 KB`，防止任意系統檔案覆寫或大檔記憶體耗盡 (OOM)。
 
 ### 11. 結構化 JSON 日誌與設定檔損毀診斷 (`src-tauri/src/logger.rs`)
-- **JSON Lines (`.jsonl`) 現代化日誌格式**：預設以單行 JSON (`timestamp`, `level`, `target`, `event`, `message`, `context`, `pid`, `os`) 寫入 `rust-file-manager/logs/rfm.jsonl`（單檔上限 5 MB 自動輪替 Rotation），方便直接對接 `jq`、Grafana Loki、ELK 或 Datadog 進行收集與查詢，亦支援在設定中切換為 Plain Text 格式。
+- **同層日誌目錄與 JSON Lines (`.jsonl`) 現代化格式**：日誌目錄 `logs/` 預設直接建立於執行檔同層，以單行 JSON (`timestamp`, `level`, `target`, `event`, `message`, `context`, `pid`, `os`) 寫入 `logs/rfm.jsonl`（單檔上限 5 MB 自動輪替 Rotation），方便直接對接 `jq`、Grafana Loki、ELK 或 Datadog 進行收集與查詢，亦支援切換為 Plain Text 格式。
+- **預設 ERROR 日誌門檻等級 (Zero Noise)**：記錄門檻預設為 **`ERROR`**（僅記錄錯誤與 Panic，初次啟動與一般運作不產生多餘雜訊），使用者可隨時於設定中自由切換為 `DEBUG`、`INFO`、`WARN` 或 `ERROR`。
 - **全域 Panic Hook 與前端未捕獲錯誤攔截**：自動註冊 Rust `std::panic::set_hook` 以及前端 `window.onerror` / `unhandledrejection` 監聽器，任何異常皆會連同行號寫入日誌檔。
 - **設定檔語法損毀自動備份與欄位診斷**：當載入的設定檔 JSON 語法錯誤時，日誌會精準記錄錯誤之 `line` 與 `column` 並自動將損毀檔案備份為 `.json.corrupted.bak`；若設定欄位值超出範圍則自動記錄 `WARN` 診斷訊息。
-- **內建 UI 日誌檢視器**：於「設定與快捷鍵 -> 系統診斷日誌 (JSON Logs)」分頁中，支援依等級（`ALL` / `INFO` / `WARN` / `ERROR` / `PANIC`）即時過濾檢視、一鍵在檔案總管開啟日誌檔或清空日誌。
+- **內建 UI 日誌檢視器**：於「設定與快捷鍵 -> 系統診斷日誌 (JSON Logs)」分頁中，支援依等級（`ALL` / `INFO` / `WARN` / `ERROR` / `PANIC`）即時過濾檢視、切換記錄門檻、一鍵在檔案總管開啟日誌檔或清空日誌。
 
 ---
 

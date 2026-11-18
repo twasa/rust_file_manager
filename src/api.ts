@@ -8,6 +8,7 @@ import type {
   FileChecksumResult,
   FilePreviewData,
   LogFormat,
+  LogLevel,
   QueueRetentionPolicy,
   StructuredLogRecord,
   SystemLocations,
@@ -252,6 +253,16 @@ export async function apiClearLogs(): Promise<void> {
 export async function apiSetLogFormat(format: LogFormat): Promise<void> {
   if (!isTauriRuntime()) return;
   return invoke<void>("cmd_set_log_format", { format });
+}
+
+export async function apiGetLogLevel(): Promise<LogLevel> {
+  if (!isTauriRuntime()) return "error";
+  return invoke<LogLevel>("cmd_get_log_level");
+}
+
+export async function apiSetLogLevel(level: LogLevel): Promise<void> {
+  if (!isTauriRuntime()) return;
+  return invoke<void>("cmd_set_log_level", { level });
 }
 
 export async function apiWriteFrontendLog(

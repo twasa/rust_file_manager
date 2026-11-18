@@ -7,7 +7,10 @@ pub mod system_ops;
 
 use batch_rename::{execute_batch_rename, preview_batch_rename, undo_batch_rename};
 use fs_ops::{get_system_locations, read_directory_cached, read_file_preview, FsCacheState};
-use logger::{diagnose_config_value, AppLogger, LogFormat, StructuredLogRecord};
+use logger::{
+    diagnose_config_value, resolve_app_directory, resolve_log_directory, AppLogger, LogFormat,
+    LogLevel, StructuredLogRecord,
+};
 use models::{
     normalize_path_str, BatchRenameExecutionResult, BatchRenamePreviewItem, BatchRenameRule,
     ConflictStrategy, DirectoryListing, FileChecksumResult, FilePreviewData, QueueRetentionPolicy,
@@ -293,20 +296,73 @@ fn cmd_clear_cache(state: State<'_, AppState>) {
     state.cache.clear_all();
 }
 
-/// 取得跨平台預設設定檔路徑（優先檢查執行檔同目錄是否有 portable 設定檔，否則存放於系統設定目錄 ~/.config/rust-file-manager/settings.json）
-fn resolve_default_config_file() -> PathBuf {
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            let portable_cfg = exe_dir.join("rfm-settings.json");
-            if portable_cfg.exists() {
-                return portable_cfg;
+/// 取得跨平台預設設定檔路徑（優先存放於執行檔同目錄 settings.json，保持免安裝可攜性）
+pub fn resolve_default_config_file() -> PathBuf {
+    let app_dir = resolve_app_directory();
+    let legacy_cfg = app_dir.join("rfm-settings.json");
+    if legacy_cfg.exists() {
+        legacy_cfg
+    } else {
+        app_dir.join("settings.json")
+    }
+}
+
+/// 初次執行時若 logs 目錄或設定檔不存在，自動建立預設目錄與 settings.json
+pub fn ensure_default_config_and_logs(logger: &AppLogger) -> PathBuf {
+    let log_dir = resolve_log_directory();
+    if !log_dir.exists() {
+        let _ = fs::create_dir_all(&log_dir);
+    }
+
+    let config_path = resolve_default_config_file();
+    if !config_path.exists() {
+        if let Some(parent) = config_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let default_config = json!({
+            "app": "rust-file-manager",
+            "schemaVersion": 1,
+            "exportedAt": chrono::Utc::now().to_rfc3339(),
+            "settings": {
+                "dualPaneEnabled": false,
+                "showHiddenFiles": false,
+                "showPreviewPanel": false,
+                "conflictStrategy": "ask",
+                "queueRetention": {
+                    "retainEvents": true,
+                    "maxDays": 30,
+                    "maxEntries": 200
+                },
+                "logFormat": "json",
+                "logLevel": "error",
+                "fontSettings": {
+                    "fontFamily": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                    "fontSizePx": 13,
+                    "uiFontSizePx": 13,
+                    "rowHeightPx": 32
+                },
+                "bookmarks": []
+            }
+        });
+        if let Ok(pretty) = serde_json::to_string_pretty(&default_config) {
+            let _ = fs::write(&config_path, pretty);
+        }
+    } else if let Ok(content) = fs::read_to_string(&config_path) {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
+            let cfg = parsed.get("settings").unwrap_or(&parsed);
+            if let Some(lvl_str) = cfg.get("logLevel").and_then(|v| v.as_str()) {
+                logger.set_level(LogLevel::parse_str(lvl_str));
+            }
+            if let Some(fmt_str) = cfg.get("logFormat").and_then(|v| v.as_str()) {
+                if fmt_str.eq_ignore_ascii_case("text") {
+                    logger.set_format(LogFormat::Text);
+                } else {
+                    logger.set_format(LogFormat::Json);
+                }
             }
         }
     }
-    let base = dirs::config_dir()
-        .or_else(dirs::home_dir)
-        .unwrap_or_else(|| PathBuf::from("."));
-    base.join("rust-file-manager").join("settings.json")
+    config_path
 }
 
 #[tauri::command]
@@ -489,6 +545,24 @@ fn cmd_set_log_format(state: State<'_, AppState>, format: LogFormat) {
 }
 
 #[tauri::command]
+fn cmd_get_log_level(state: State<'_, AppState>) -> String {
+    state.logger.get_level().as_str().to_lowercase()
+}
+
+#[tauri::command]
+fn cmd_set_log_level(state: State<'_, AppState>, level: String) {
+    let lvl = LogLevel::parse_str(&level);
+    state.logger.set_level(lvl);
+    state.logger.log(
+        "INFO",
+        "backend::logger",
+        "log_level_changed",
+        &format!("日誌記錄等級已切換為 {:?}", lvl),
+        None,
+    );
+}
+
+#[tauri::command]
 fn cmd_write_frontend_log(
     state: State<'_, AppState>,
     level: String,
@@ -506,6 +580,7 @@ fn cmd_write_frontend_log(
 pub fn run() {
     let logger = AppLogger::new();
     AppLogger::install_panic_hook(Arc::clone(&logger));
+    ensure_default_config_and_logs(&logger);
     let cache = FsCacheState::new(128);
     let queue = QueueManager::new(Arc::clone(&cache));
 
@@ -549,8 +624,51 @@ pub fn run() {
             cmd_read_logs,
             cmd_clear_logs,
             cmd_set_log_format,
+            cmd_get_log_level,
+            cmd_set_log_level,
             cmd_write_frontend_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_default_config_path_filename() {
+        let p = resolve_default_config_file();
+        let fname = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        assert!(fname == "settings.json" || fname == "rfm-settings.json");
+    }
+
+    #[test]
+    fn test_ensure_default_config_and_logs_creation() {
+        let temp_dir = std::env::temp_dir().join(format!("rfm_test_{}", uuid::Uuid::new_v4()));
+        let _ = fs::create_dir_all(&temp_dir);
+
+        let _logger = AppLogger::new();
+        let cfg_path = temp_dir.join("settings.json");
+        assert!(!cfg_path.exists());
+
+        let default_config = json!({
+            "app": "rust-file-manager",
+            "schemaVersion": 1,
+            "settings": {
+                "logLevel": "error"
+            }
+        });
+        fs::write(&cfg_path, serde_json::to_string(&default_config).unwrap()).unwrap();
+        assert!(cfg_path.exists());
+
+        let content = fs::read_to_string(&cfg_path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(
+            parsed.get("settings").and_then(|s| s.get("logLevel")).and_then(|v| v.as_str()),
+            Some("error")
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }
