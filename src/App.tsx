@@ -133,14 +133,19 @@ export const App: React.FC = () => {
       .catch(console.error);
 
     let unlistenFn: (() => void) | null = null;
+    const announcedCompletedIds = new Set<string>();
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
       listen<TransferJobSnapshot[]>("queue://updated", (event) => {
         setTransferJobs(event.payload);
-        const anyCompleted = event.payload.some(
-          (j) => j.status === "completed"
-        );
-        if (anyCompleted) {
-          triggerRefresh();
+        for (const job of event.payload) {
+          if (
+            job.status === "completed" &&
+            !announcedCompletedIds.has(job.id)
+          ) {
+            announcedCompletedIds.add(job.id);
+            triggerRefresh();
+            notify(job.currentFile);
+          }
         }
       })
         .then((fn) => {

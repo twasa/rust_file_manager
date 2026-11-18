@@ -17,6 +17,22 @@ use walkdir::WalkDir;
 
 const CHUNK_BUFFER_SIZE: usize = 2 * 1024 * 1024; // 2 MB 緩衝區，避免大型檔案阻塞記憶體或 I/O
 
+#[derive(Default, Clone, Copy)]
+struct TransferCounters {
+    processed_files: usize,
+    processed_bytes: u64,
+    skipped_files: usize,
+    overwritten_files: usize,
+    renamed_files: usize,
+}
+
+enum TargetResolution {
+    Clean(PathBuf),
+    Skipped,
+    Overwritten(PathBuf),
+    Renamed(PathBuf),
+}
+
 pub struct JobControl {
     pub paused: AtomicBool,
     pub cancelled: AtomicBool,
@@ -103,6 +119,9 @@ impl QueueManager {
             processed_bytes: 0,
             total_files: 0,
             processed_files: 0,
+            skipped_files: 0,
+            overwritten_files: 0,
+            renamed_files: 0,
             current_file: "等待佇列排程...".to_string(),
             speed_bytes_per_sec: 0,
             created_at_ms: now_ms,
@@ -186,6 +205,19 @@ impl QueueManager {
         }
     }
 
+    fn sync_counters(&self, job_id: &str, c: &TransferCounters, current_file: String, speed: u64) {
+        self.update_job(job_id, |j| {
+            j.processed_files = c.processed_files;
+            j.processed_bytes = c.processed_bytes;
+            j.skipped_files = c.skipped_files;
+            j.overwritten_files = c.overwritten_files;
+            j.renamed_files = c.renamed_files;
+            j.speed_bytes_per_sec = speed;
+            j.current_file = current_file;
+        });
+        self.emit_update();
+    }
+
     fn check_pause_or_cancel(&self, ctrl: &JobControl) -> bool {
         while ctrl.paused.load(Ordering::SeqCst) {
             if ctrl.cancelled.load(Ordering::SeqCst) {
@@ -250,24 +282,15 @@ impl QueueManager {
         self.emit_update();
 
         let start_time = Instant::now();
-        let mut processed_bytes = 0u64;
-        let mut processed_files = 0usize;
+        let mut counters = TransferCounters::default();
 
         let result = match snapshot.job_type {
-            TransferJobType::Trash => self.execute_trash(
-                job_id,
-                &snapshot.sources,
-                &ctrl,
-                &mut processed_files,
-            ),
-            TransferJobType::Delete => self.execute_delete(
-                job_id,
-                &snapshot.sources,
-                &ctrl,
-                &mut processed_files,
-                &mut processed_bytes,
-                start_time,
-            ),
+            TransferJobType::Trash => {
+                self.execute_trash(job_id, &snapshot.sources, &ctrl, &mut counters)
+            }
+            TransferJobType::Delete => {
+                self.execute_delete(job_id, &snapshot.sources, &ctrl, &mut counters, start_time)
+            }
             TransferJobType::Copy | TransferJobType::Move => {
                 let dest_dir = match &snapshot.destination {
                     Some(d) => PathBuf::from(d),
@@ -283,8 +306,7 @@ impl QueueManager {
                     &dest_dir,
                     snapshot.conflict_strategy,
                     &ctrl,
-                    &mut processed_files,
-                    &mut processed_bytes,
+                    &mut counters,
                     start_time,
                 )
             }
@@ -304,13 +326,18 @@ impl QueueManager {
             Ok(()) => {
                 if !ctrl.cancelled.load(Ordering::SeqCst) {
                     let elapsed_secs = start_time.elapsed().as_secs_f64().max(0.001);
-                    let speed = (processed_bytes as f64 / elapsed_secs) as u64;
+                    let speed = (counters.processed_bytes as f64 / elapsed_secs) as u64;
+                    let summary = build_completion_summary(&counters);
+
                     self.update_job(job_id, |j| {
                         j.status = JobStatus::Completed;
                         j.processed_bytes = j.total_bytes;
                         j.processed_files = j.total_files;
+                        j.skipped_files = counters.skipped_files;
+                        j.overwritten_files = counters.overwritten_files;
+                        j.renamed_files = counters.renamed_files;
                         j.speed_bytes_per_sec = speed;
-                        j.current_file = "任務完成".to_string();
+                        j.current_file = summary;
                     });
                     self.emit_update();
                 }
@@ -335,7 +362,7 @@ impl QueueManager {
         job_id: &str,
         sources: &[String],
         ctrl: &JobControl,
-        processed_files: &mut usize,
+        counters: &mut TransferCounters,
     ) -> Result<(), String> {
         for src in sources {
             if self.check_pause_or_cancel(ctrl) {
@@ -352,15 +379,11 @@ impl QueueManager {
             });
             self.emit_update();
 
-            // 優先移至系統資源回收桶，若環境無桌面回收桶則安全回退刪除
             if let Err(e) = trash::delete(&p) {
                 return Err(format!("無法移至資源回收桶 ({}): {}", name, e));
             }
-            *processed_files += 1;
-            self.update_job(job_id, |j| {
-                j.processed_files = *processed_files;
-            });
-            self.emit_update();
+            counters.processed_files += 1;
+            self.sync_counters(job_id, counters, format!("已移至回收桶: {}", name), 0);
         }
         Ok(())
     }
@@ -370,8 +393,7 @@ impl QueueManager {
         job_id: &str,
         sources: &[String],
         ctrl: &JobControl,
-        processed_files: &mut usize,
-        processed_bytes: &mut u64,
+        counters: &mut TransferCounters,
         start_time: Instant,
     ) -> Result<(), String> {
         for src in sources {
@@ -385,21 +407,15 @@ impl QueueManager {
             if p.is_file() || p.is_symlink() {
                 let len = fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
                 fs::remove_file(&p).map_err(|e| format!("刪除檔案失敗 ({}): {}", src, e))?;
-                *processed_files += 1;
-                *processed_bytes += len;
+                counters.processed_files += 1;
+                counters.processed_bytes += len;
             } else if p.is_dir() {
                 fs::remove_dir_all(&p).map_err(|e| format!("刪除目錄失敗 ({}): {}", src, e))?;
-                *processed_files += 1;
+                counters.processed_files += 1;
             }
             let elapsed = start_time.elapsed().as_secs_f64().max(0.001);
-            let speed = (*processed_bytes as f64 / elapsed) as u64;
-            self.update_job(job_id, |j| {
-                j.processed_files = *processed_files;
-                j.processed_bytes = *processed_bytes;
-                j.speed_bytes_per_sec = speed;
-                j.current_file = normalize_path_str(&p);
-            });
-            self.emit_update();
+            let speed = (counters.processed_bytes as f64 / elapsed) as u64;
+            self.sync_counters(job_id, counters, normalize_path_str(&p), speed);
         }
         Ok(())
     }
@@ -413,8 +429,7 @@ impl QueueManager {
         dest_dir: &Path,
         strategy: ConflictStrategy,
         ctrl: &JobControl,
-        processed_files: &mut usize,
-        processed_bytes: &mut u64,
+        counters: &mut TransferCounters,
         start_time: Instant,
     ) -> Result<(), String> {
         if !dest_dir.exists() {
@@ -434,14 +449,45 @@ impl QueueManager {
             let file_name = src_path
                 .file_name()
                 .ok_or_else(|| format!("無效的來源名稱: {}", src_str))?;
-            let target_path = resolve_target_path(dest_dir.join(file_name), strategy, &src_path)?;
-            let target_path = match target_path {
-                Some(t) => t,
-                None => {
-                    // Skip
-                    *processed_files += 1;
+            let resolution = resolve_target_path(dest_dir.join(file_name), strategy, &src_path)?;
+
+            let target_path = match resolution {
+                TargetResolution::Skipped => {
+                    // 計算被略過的檔案數與位元組數（若為資料夾則統計其下所有檔案）
+                    if src_path.is_file() {
+                        counters.processed_files += 1;
+                        counters.skipped_files += 1;
+                        counters.processed_bytes +=
+                            fs::metadata(&src_path).map(|m| m.len()).unwrap_or(0);
+                    } else if src_path.is_dir() {
+                        for entry in WalkDir::new(&src_path).into_iter().filter_map(|e| e.ok()) {
+                            if entry.file_type().is_file() {
+                                counters.processed_files += 1;
+                                counters.skipped_files += 1;
+                                counters.processed_bytes +=
+                                    entry.metadata().map(|m| m.len()).unwrap_or(0);
+                            }
+                        }
+                    }
+                    self.sync_counters(
+                        job_id,
+                        counters,
+                        format!("已略過同名項目: {}", file_name.to_string_lossy()),
+                        0,
+                    );
                     continue;
                 }
+                TargetResolution::Overwritten(t) => {
+                    if src_path.is_file() {
+                        counters.overwritten_files += 1;
+                    }
+                    t
+                }
+                TargetResolution::Renamed(t) => {
+                    counters.renamed_files += 1;
+                    t
+                }
+                TargetResolution::Clean(t) => t,
             };
 
             // 防止將目錄複製或搬移到自己的子目錄中
@@ -450,27 +496,36 @@ impl QueueManager {
             }
 
             // 如果是同磁碟區的 Move 且目標未衝突，可嘗試 O(1) 原地 rename
-            if is_move && src_path != target_path && fs::rename(&src_path, &target_path).is_ok() {
+            if is_move && !same_file_path(&src_path, &target_path) && fs::rename(&src_path, &target_path).is_ok() {
                 let len = fs::metadata(&target_path).map(|m| m.len()).unwrap_or(0);
-                *processed_files += 1;
-                *processed_bytes += len;
-                self.update_job(job_id, |j| {
-                    j.processed_files = *processed_files;
-                    j.processed_bytes = *processed_bytes;
-                    j.current_file = normalize_path_str(&target_path);
-                });
-                self.emit_update();
+                counters.processed_files += 1;
+                counters.processed_bytes += len;
+                self.sync_counters(job_id, counters, normalize_path_str(&target_path), 0);
                 continue;
             }
 
             if src_path.is_file() {
+                // 若來源與目標是同一個檔案（例如在同一個資料夾內選「直接覆寫」並按 Ctrl+C -> Ctrl+V），
+                // 絕對不可執行 File::create(target_path)，否則會把來源檔案截斷為 0 bytes！
+                if same_file_path(&src_path, &target_path) {
+                    let len = fs::metadata(&src_path).map(|m| m.len()).unwrap_or(0);
+                    counters.processed_files += 1;
+                    counters.processed_bytes += len;
+                    self.sync_counters(
+                        job_id,
+                        counters,
+                        format!("同路徑原地保留: {}", file_name.to_string_lossy()),
+                        0,
+                    );
+                    continue;
+                }
+
                 self.copy_file_chunked(
                     job_id,
                     &src_path,
                     &target_path,
                     ctrl,
-                    processed_files,
-                    processed_bytes,
+                    counters,
                     start_time,
                 )?;
                 if is_move && !ctrl.cancelled.load(Ordering::SeqCst) {
@@ -483,11 +538,14 @@ impl QueueManager {
                     &target_path,
                     strategy,
                     ctrl,
-                    processed_files,
-                    processed_bytes,
+                    counters,
                     start_time,
                 )?;
-                if is_move && !ctrl.cancelled.load(Ordering::SeqCst) {
+                if is_move
+                    && !ctrl.cancelled.load(Ordering::SeqCst)
+                    && counters.skipped_files == 0
+                    && !same_file_path(&src_path, &target_path)
+                {
                     let _ = fs::remove_dir_all(&src_path);
                 }
             }
@@ -503,8 +561,7 @@ impl QueueManager {
         dst_dir: &Path,
         strategy: ConflictStrategy,
         ctrl: &JobControl,
-        processed_files: &mut usize,
-        processed_bytes: &mut u64,
+        counters: &mut TransferCounters,
         start_time: Instant,
     ) -> Result<(), String> {
         fs::create_dir_all(dst_dir).map_err(|e| e.to_string())?;
@@ -521,18 +578,54 @@ impl QueueManager {
             if entry.file_type().is_dir() {
                 fs::create_dir_all(&target).map_err(|e| e.to_string())?;
             } else if entry.file_type().is_file() {
-                if let Some(resolved_target) = resolve_target_path(target, strategy, path)? {
-                    self.copy_file_chunked(
-                        job_id,
-                        path,
-                        &resolved_target,
-                        ctrl,
-                        processed_files,
-                        processed_bytes,
-                        start_time,
-                    )?;
-                } else {
-                    *processed_files += 1;
+                match resolve_target_path(target, strategy, path)? {
+                    TargetResolution::Skipped => {
+                        counters.processed_files += 1;
+                        counters.skipped_files += 1;
+                        counters.processed_bytes +=
+                            entry.metadata().map(|m| m.len()).unwrap_or(0);
+                        let fname = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        self.sync_counters(job_id, counters, format!("已略過: {}", fname), 0);
+                    }
+                    TargetResolution::Overwritten(resolved_target) => {
+                        counters.overwritten_files += 1;
+                        if !same_file_path(path, &resolved_target) {
+                            self.copy_file_chunked(
+                                job_id,
+                                path,
+                                &resolved_target,
+                                ctrl,
+                                counters,
+                                start_time,
+                            )?;
+                        } else {
+                            counters.processed_files += 1;
+                        }
+                    }
+                    TargetResolution::Renamed(resolved_target) => {
+                        counters.renamed_files += 1;
+                        self.copy_file_chunked(
+                            job_id,
+                            path,
+                            &resolved_target,
+                            ctrl,
+                            counters,
+                            start_time,
+                        )?;
+                    }
+                    TargetResolution::Clean(resolved_target) => {
+                        self.copy_file_chunked(
+                            job_id,
+                            path,
+                            &resolved_target,
+                            ctrl,
+                            counters,
+                            start_time,
+                        )?;
+                    }
                 }
             }
         }
@@ -546,8 +639,7 @@ impl QueueManager {
         src_file: &Path,
         dst_file: &Path,
         ctrl: &JobControl,
-        processed_files: &mut usize,
-        processed_bytes: &mut u64,
+        counters: &mut TransferCounters,
         start_time: Instant,
     ) -> Result<(), String> {
         if let Some(parent) = dst_file.parent() {
@@ -576,63 +668,93 @@ impl QueueManager {
             writer
                 .write_all(&buffer[..read_bytes])
                 .map_err(|e| e.to_string())?;
-            *processed_bytes += read_bytes as u64;
+            counters.processed_bytes += read_bytes as u64;
 
             if last_emit.elapsed() >= Duration::from_millis(80) {
                 let elapsed = start_time.elapsed().as_secs_f64().max(0.001);
-                let speed = (*processed_bytes as f64 / elapsed) as u64;
-                let cur_name = src_file
+                let speed = (counters.processed_bytes as f64 / elapsed) as u64;
+                let cur_name = dst_file
                     .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
-                self.update_job(job_id, |j| {
-                    j.processed_bytes = *processed_bytes;
-                    j.speed_bytes_per_sec = speed;
-                    j.current_file = cur_name;
-                });
-                self.emit_update();
+                self.sync_counters(job_id, counters, cur_name, speed);
                 last_emit = Instant::now();
             }
         }
 
         writer.flush().map_err(|e| e.to_string())?;
-        *processed_files += 1;
+        counters.processed_files += 1;
 
         let elapsed = start_time.elapsed().as_secs_f64().max(0.001);
-        let speed = (*processed_bytes as f64 / elapsed) as u64;
-        let cur_name = src_file
+        let speed = (counters.processed_bytes as f64 / elapsed) as u64;
+        let cur_name = dst_file
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
 
-        self.update_job(job_id, |j| {
-            j.processed_files = *processed_files;
-            j.processed_bytes = *processed_bytes;
-            j.speed_bytes_per_sec = speed;
-            j.current_file = cur_name;
-        });
-        self.emit_update();
+        self.sync_counters(job_id, counters, cur_name, speed);
 
         Ok(())
     }
 }
 
-/// 根據衝突策略決定實際目標路徑
+/// 跨平台不分大小寫路徑比對（確認來源與目標是否指向完全相同的位置）
+fn same_file_path(a: &Path, b: &Path) -> bool {
+    let na = normalize_path_str(a);
+    let nb = normalize_path_str(b);
+    #[cfg(target_os = "windows")]
+    {
+        na.eq_ignore_ascii_case(&nb)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        na == nb
+    }
+}
+
+/// 產生人類易讀的任務完成結算摘要（明確區分實際處理、略過、覆寫、重新命名數量）
+fn build_completion_summary(c: &TransferCounters) -> String {
+    let actual_copied = c
+        .processed_files
+        .saturating_sub(c.skipped_files);
+    let mut parts = Vec::new();
+    if actual_copied > 0 {
+        parts.push(format!("實際處理 {} 項", actual_copied));
+    }
+    if c.skipped_files > 0 {
+        parts.push(format!("略過同名 {} 項", c.skipped_files));
+    }
+    if c.overwritten_files > 0 {
+        parts.push(format!("覆寫 {} 項", c.overwritten_files));
+    }
+    if c.renamed_files > 0 {
+        parts.push(format!("自動改名 {} 項", c.renamed_files));
+    }
+    if parts.is_empty() {
+        "任務完成".to_string()
+    } else {
+        format!("完成 ({})", parts.join(" / "))
+    }
+}
+
+/// 根據衝突策略決定實際目標路徑與處理方式
 fn resolve_target_path(
     candidate: PathBuf,
     strategy: ConflictStrategy,
     src_path: &Path,
-) -> Result<Option<PathBuf>, String> {
-    // 若來源與目標完全相同（例如在同目錄複製貼上），自動走 Rename 產生副本
-    let same_path = candidate == src_path;
+) -> Result<TargetResolution, String> {
+    let same_path = same_file_path(&candidate, src_path);
     if !candidate.exists() && !same_path {
-        return Ok(Some(candidate));
+        return Ok(TargetResolution::Clean(candidate));
     }
 
     match strategy {
-        ConflictStrategy::Skip if !same_path => Ok(None),
-        ConflictStrategy::Overwrite if !same_path => Ok(Some(candidate)),
-        ConflictStrategy::Rename | _ => {
+        // 當使用者選擇「略過同名檔案 (Skip)」時，無論是否為同目錄貼上，只要目標已存在一律略過！
+        ConflictStrategy::Skip => Ok(TargetResolution::Skipped),
+        // 當使用者選擇「直接覆寫 (Overwrite)」時，明確標記為 Overwritten
+        ConflictStrategy::Overwrite => Ok(TargetResolution::Overwritten(candidate)),
+        // 當使用者選擇「自動重新命名保留兩者 (Rename)」時，產生 _1, _2 副本
+        ConflictStrategy::Rename => {
             let parent = candidate
                 .parent()
                 .ok_or_else(|| "無效的目標父目錄".to_string())?;
@@ -653,10 +775,39 @@ fn resolve_target_path(
                 };
                 let next_path = parent.join(new_name);
                 if !next_path.exists() {
-                    return Ok(Some(next_path));
+                    return Ok(TargetResolution::Renamed(next_path));
                 }
             }
             Err("自動重新命名超過上限 (9999)".to_string())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    #[test]
+    fn test_conflict_strategy_skip_and_rename_on_same_dir() {
+        let temp_dir = env::temp_dir().join(format!("rfm_conflict_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let file_a = temp_dir.join("demo.txt");
+        fs::write(&file_a, b"hello").unwrap();
+
+        // 1. 測試在同目錄貼上且策略為 Skip 時，必須回傳 Skipped（而不是變成 Rename）
+        let res_skip = resolve_target_path(file_a.clone(), ConflictStrategy::Skip, &file_a).unwrap();
+        assert!(matches!(res_skip, TargetResolution::Skipped));
+
+        // 2. 測試在同目錄貼上且策略為 Rename 時，應回傳 Renamed(demo_1.txt)
+        let res_rename = resolve_target_path(file_a.clone(), ConflictStrategy::Rename, &file_a).unwrap();
+        match res_rename {
+            TargetResolution::Renamed(p) => {
+                assert_eq!(p.file_name().unwrap().to_string_lossy(), "demo_1.txt");
+            }
+            _ => panic!("Expected TargetResolution::Renamed"),
+        }
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

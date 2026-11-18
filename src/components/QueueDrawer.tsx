@@ -138,6 +138,30 @@ export const QueueDrawer: React.FC = () => {
     }
   };
 
+  const renderStrategyBadge = (job: TransferJobSnapshot) => {
+    if (job.jobType !== "copy" && job.jobType !== "move") return null;
+    switch (job.conflictStrategy) {
+      case "skip":
+        return (
+          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] shrink-0">
+            策略:略過同名
+          </span>
+        );
+      case "overwrite":
+        return (
+          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-rose-300 text-[10px] shrink-0">
+            策略:直接覆寫
+          </span>
+        );
+      case "rename":
+        return (
+          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 text-[10px] shrink-0">
+            策略:自動改名
+          </span>
+        );
+    }
+  };
+
   const renderJobTypeBadge = (job: TransferJobSnapshot) => {
     switch (job.jobType) {
       case "copy":
@@ -324,6 +348,7 @@ export const QueueDrawer: React.FC = () => {
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 min-w-0">
                     {renderJobTypeBadge(job)}
+                    {renderStrategyBadge(job)}
                     <span className="text-slate-200 font-medium truncate text-[11px]">
                       {job.sources.length} 項{" "}
                       {job.destination ? `→ ${job.destination}` : ""}
@@ -388,8 +413,33 @@ export const QueueDrawer: React.FC = () => {
                   />
                 </div>
 
+                {/* 衝突處理結果統計標籤 (略過 / 覆寫 / 自動改名) */}
+                {((job.skippedFiles ?? 0) > 0 ||
+                  (job.overwrittenFiles ?? 0) > 0 ||
+                  (job.renamedFiles ?? 0) > 0) && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    {(job.skippedFiles ?? 0) > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-medium">
+                        已略過同名: {job.skippedFiles}
+                      </span>
+                    )}
+                    {(job.overwrittenFiles ?? 0) > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-medium">
+                        已覆寫同名: {job.overwrittenFiles}
+                      </span>
+                    )}
+                    {(job.renamedFiles ?? 0) > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-[10px] font-medium">
+                        已自動改名: {job.renamedFiles}
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between text-[10px] text-slate-400 gap-2">
-                  <span className="truncate font-mono">{job.currentFile}</span>
+                  <span className="truncate font-mono text-slate-300">
+                    {job.currentFile}
+                  </span>
                   <span className="flex items-center gap-1 shrink-0 font-mono">
                     <span>
                       {job.processedFiles}/{job.totalFiles}

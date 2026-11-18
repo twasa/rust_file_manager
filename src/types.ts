@@ -80,6 +80,9 @@ export interface TransferJobSnapshot {
   processedBytes: number;
   totalFiles: number;
   processedFiles: number;
+  skippedFiles: number;
+  overwrittenFiles: number;
+  renamedFiles: number;
   currentFile: string;
   speedBytesPerSec: number;
   createdAtMs: number;
