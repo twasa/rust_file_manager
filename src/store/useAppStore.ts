@@ -280,8 +280,8 @@ interface AppStoreState {
   importConfigJson: (jsonString: string) => void;
 }
 
-const initialLeftTab = createNewTab("D:/devops_workspace", "#3b82f6");
-const initialRightTab = createNewTab("D:/devops_workspace/private", "#10b981");
+const initialLeftTab = createNewTab("~", "#3b82f6");
+const initialRightTab = createNewTab("~", "#10b981");
 
 export const useAppStore = create<AppStoreState>()(
   persist(
@@ -298,10 +298,7 @@ export const useAppStore = create<AppStoreState>()(
         maxEvents: 50,
       },
       pendingConflictPrompt: null,
-      bookmarks: [
-        { label: "DevOps 工作區", path: "D:/devops_workspace" },
-        { label: "個人專案區 (Private)", path: "D:/devops_workspace/private" },
-      ],
+      bookmarks: [],
       fontSettings: {
         fontFamily: AVAILABLE_FONTS[0].value,
         fontSizePx: 14,
@@ -371,10 +368,7 @@ export const useAppStore = create<AppStoreState>()(
             retentionDays: 7,
             maxEvents: 50,
           },
-          bookmarks: [
-            { label: "DevOps 工作區", path: "D:/devops_workspace" },
-            { label: "個人專案區 (Private)", path: "D:/devops_workspace/private" },
-          ],
+          bookmarks: [],
           fontSettings: {
             fontFamily: AVAILABLE_FONTS[0].value,
             fontSizePx: 14,
@@ -403,8 +397,14 @@ export const useAppStore = create<AppStoreState>()(
           const updatePane = (p: PaneState): PaneState => ({
             ...p,
             tabs: p.tabs.map((t) =>
-              !t.path || t.path === "."
-                ? { ...t, path: norm, title: getBaseName(norm), history: [norm], historyIndex: 0 }
+              !t.path || t.path === "." || t.path === "~"
+                ? {
+                    ...t,
+                    path: norm,
+                    title: getBaseName(norm),
+                    history: [norm],
+                    historyIndex: 0,
+                  }
                 : t
             ),
           });
@@ -826,7 +826,7 @@ export const useAppStore = create<AppStoreState>()(
     }),
     {
       name: "rust_file_manager_settings_v1",
-      version: 2,
+      version: 3,
       migrate: (persistedState: unknown, version: number) => {
         const p = (persistedState as Partial<AppStoreState>) || {};
         if (version < 2) {
@@ -838,6 +838,14 @@ export const useAppStore = create<AppStoreState>()(
                 : k
             );
           }
+        }
+        if (version < 3 && Array.isArray(p.bookmarks)) {
+          // 清除早期預設硬編碼的工作區書籤，保留使用者自行新增的其他書籤
+          p.bookmarks = p.bookmarks.filter(
+            (b) =>
+              b.path !== "D:/devops_workspace" &&
+              b.path !== "D:/devops_workspace/private"
+          );
         }
         return p as AppStoreState;
       },

@@ -85,6 +85,7 @@ export const App: React.FC = () => {
   const navigateTab = useAppStore((s) => s.navigateTab);
   const setTabSelection = useAppStore((s) => s.setTabSelection);
   const addBookmark = useAppStore((s) => s.addBookmark);
+  const initDefaultPaths = useAppStore((s) => s.initDefaultPaths);
   const triggerRefresh = useAppStore((s) => s.triggerRefresh);
 
   const [systemLocations, setSystemLocations] =
@@ -151,7 +152,12 @@ export const App: React.FC = () => {
   // 初始化系統掛載點與背景佇列事件監聽
   useEffect(() => {
     apiGetSystemLocations()
-      .then((locs) => setSystemLocations(locs))
+      .then((locs) => {
+        setSystemLocations(locs);
+        if (locs.homeDir) {
+          initDefaultPaths(locs.homeDir);
+        }
+      })
       .catch(console.error);
 
     apiListTransferJobs()
@@ -183,7 +189,7 @@ export const App: React.FC = () => {
     return () => {
       if (unlistenFn) unlistenFn();
     };
-  }, [setTransferJobs, triggerRefresh]);
+  }, [initDefaultPaths, notify, setTransferJobs, triggerRefresh]);
 
   const handleEntriesLoaded = useCallback(
     (pane: PaneId, entries: FileEntry[]) => {

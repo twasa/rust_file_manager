@@ -91,37 +91,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 px-2 mb-1.5">
           書籤捷徑 (可拖放檔案至此)
         </div>
-        <div className="space-y-0.5">
-          {bookmarks.map((bm) => (
-            <div
-              key={bm.path}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                onDropFilesToDir(bm.path);
-              }}
-              className="group flex items-center justify-between px-2.5 py-1.5 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-            >
-              <button
-                type="button"
-                onClick={() => navigateTab(activePane, bm.path)}
-                className="flex items-center gap-2 min-w-0 flex-1 text-left"
-                title={bm.path}
+        {bookmarks.length === 0 ? (
+          <div className="px-2.5 py-2 text-[11px] text-slate-500 italic">
+            尚無書籤（可對任一目錄按右鍵加入書籤）
+          </div>
+        ) : (
+          <div className="space-y-0.5">
+            {bookmarks.map((bm) => (
+              <div
+                key={bm.path}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  onDropFilesToDir(bm.path);
+                }}
+                className="group flex items-center justify-between px-2.5 py-1.5 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
               >
-                <Bookmark size={13} className="text-amber-400 shrink-0" />
-                <span className="truncate">{bm.label}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => removeBookmark(bm.path)}
-                className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-500 hover:text-rose-400"
-                title="移除書籤"
-              >
-                <Trash2 size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
+                <button
+                  type="button"
+                  onClick={() => navigateTab(activePane, bm.path)}
+                  className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                  title={bm.path}
+                >
+                  <Bookmark size={13} className="text-amber-400 shrink-0" />
+                  <span className="truncate">{bm.label}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeBookmark(bm.path)}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-500 hover:text-rose-400"
+                  title="移除書籤"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 本機磁碟與掛載點 */}

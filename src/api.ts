@@ -42,8 +42,7 @@ export async function apiGetSystemLocations(): Promise<SystemLocations> {
         },
       ],
       specialLocations: [
-        { id: "home", label: "家目錄 (Home)", path: "D:/devops_workspace", icon: "home" },
-        { id: "workspace", label: "工作區 (Workspace)", path: "D:/devops_workspace/private/rust_file_manager", icon: "folder-git" },
+        { id: "home", label: "家目錄 (Home)", path: "~", icon: "home" },
       ],
     };
   }

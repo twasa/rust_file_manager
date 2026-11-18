@@ -458,16 +458,6 @@ pub fn get_system_locations() -> SystemLocations {
         }
     }
 
-    // 額外加入目前工作區捷徑（若存在）
-    if let Ok(cwd) = std::env::current_dir() {
-        special_locations.push(SpecialLocation {
-            id: "workspace".to_string(),
-            label: "工作區 (Workspace)".to_string(),
-            path: normalize_path_str(&cwd),
-            icon: "folder-git".to_string(),
-        });
-    }
-
     SystemLocations {
         os_platform: std::env::consts::OS.to_string(),
         home_dir: home_str,
