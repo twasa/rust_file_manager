@@ -71,7 +71,11 @@ fi
 rm -rf "${OUT_DIR}"
 mkdir -p "${OUT_DIR}"
 
-RELEASE_DIR="${PROJECT_ROOT}/src-tauri/target/release"
+if [[ -n "${CARGO_TARGET_DIR:-}" && -d "${CARGO_TARGET_DIR}/release" ]]; then
+  RELEASE_DIR="${CARGO_TARGET_DIR}/release"
+else
+  RELEASE_DIR="${PROJECT_ROOT}/src-tauri/target/release"
+fi
 BUNDLE_DIR="${RELEASE_DIR}/bundle"
 OS_NAME="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH_NAME="$(uname -m)"

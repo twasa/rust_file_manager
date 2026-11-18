@@ -83,7 +83,11 @@ if (Test-Path $OutDir) {
 }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
-$ReleaseDir = Join-Path $ProjectRoot "src-tauri/target/release"
+$ReleaseDir = if ($env:CARGO_TARGET_DIR -and (Test-Path (Join-Path $env:CARGO_TARGET_DIR "release"))) {
+    Join-Path $env:CARGO_TARGET_DIR "release"
+} else {
+    Join-Path $ProjectRoot "src-tauri/target/release"
+}
 $BundleDir = Join-Path $ReleaseDir "bundle"
 
 # 1. 複製免安裝單一執行檔 (Portable Executable)

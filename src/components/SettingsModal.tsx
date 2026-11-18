@@ -20,17 +20,20 @@ import {
   apiClearLogs,
   apiGetDefaultConfigPath,
   apiGetLogFilePath,
+  apiGetLogLevel,
   apiLoadConfigFile,
   apiReadLogs,
   apiRevealInShell,
   apiSaveConfigFile,
   apiSetLogFormat,
+  apiSetLogLevel,
 } from "../api";
 import { AVAILABLE_FONTS, useAppStore } from "../store/useAppStore";
 import { keyboardEventToCombo } from "../utils/formatters";
 import type {
   ConflictStrategy,
   LogFormat,
+  LogLevel,
   ShortcutActionId,
   StructuredLogRecord,
 } from "../types";
@@ -80,6 +83,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const updateQueueRetention = useAppStore((s) => s.updateQueueRetention);
   const logFormat = useAppStore((s) => s.logFormat);
   const setLogFormat = useAppStore((s) => s.setLogFormat);
+  const logLevel = useAppStore((s) => s.logLevel);
+  const setLogLevel = useAppStore((s) => s.setLogLevel);
   const exportConfigJson = useAppStore((s) => s.exportConfigJson);
   const importConfigJson = useAppStore((s) => s.importConfigJson);
 
@@ -738,11 +743,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span>1. 直接儲存 / 載入本機設定檔路徑 (支援 Portable 隨身碟攜帶)</span>
                 </div>
                 <p className="text-slate-400 leading-relaxed">
-                  可將您的<strong>字型與大小、自訂鍵盤快速鍵、書籤捷徑、已鎖定與設色分頁、雙欄狀態</strong>直接寫入指定的{" "}
+                  可將您的<strong>字型與大小、自訂鍵盤快速鍵、書籤捷徑、已鎖定與設色分頁、雙欄狀態、佇列策略與日誌等級</strong>直接寫入指定的{" "}
                   <code className="text-emerald-300">.json</code>{" "}
-                  設定檔路徑。若將檔案命名為{" "}
-                  <code className="text-amber-300">rfm-settings.json</code>{" "}
-                  放在執行檔同目錄，即可作為免安裝隨身攜帶設定檔。
+                  設定檔路徑。預設直接存放在執行檔同目錄下的{" "}
+                  <code className="text-amber-300">settings.json</code>{" "}
+                  （與 <code className="text-amber-300">logs/</code> 日誌目錄），完全免安裝、隨身攜帶，初次執行自動產生。
                 </p>
 
                 <div className="space-y-2 pt-1">
@@ -879,6 +884,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }`}
                       >
                         {fmt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 日誌記錄門檻等級 (Log Level Filter) */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+                  <div>
+                    <div className="font-semibold text-xs text-slate-300">
+                      日誌記錄等級 (Log Level Filter)
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      預設為 <strong>ERROR</strong>（僅記錄錯誤與 Panic，保持零雜訊）；亦可切換為 DEBUG、INFO 或 WARN。
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-700 shrink-0">
+                    {(
+                      [
+                        { id: "error", label: "ERROR (預設)" },
+                        { id: "warn", label: "WARN" },
+                        { id: "info", label: "INFO" },
+                        { id: "debug", label: "DEBUG" },
+                      ] as { id: LogLevel; label: string }[]
+                    ).map((lvl) => (
+                      <button
+                        key={lvl.id}
+                        type="button"
+                        onClick={async () => {
+                          setLogLevel(lvl.id);
+                          await apiSetLogLevel(lvl.id);
+                          await refreshLogs();
+                          onNotify?.(`日誌記錄等級已切換為 ${lvl.label}`);
+                        }}
+                        className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                          logLevel === lvl.id
+                            ? "bg-rose-500 text-white font-semibold"
+                            : "text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        {lvl.label}
                       </button>
                     ))}
                   </div>

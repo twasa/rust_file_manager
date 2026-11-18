@@ -6,6 +6,7 @@ import type {
   FontSettings,
   KeybindingItem,
   LogFormat,
+  LogLevel,
   PaneId,
   QueueRetentionPolicy,
   ShortcutActionId,
@@ -224,6 +225,7 @@ interface AppStoreState {
   conflictStrategy: ConflictStrategy;
   queueRetention: QueueRetentionPolicy;
   logFormat: LogFormat;
+  logLevel: LogLevel;
   pendingConflictPrompt: PendingConflictPrompt | null;
   bookmarks: { label: string; path: string }[];
   fontSettings: FontSettings;
@@ -244,6 +246,7 @@ interface AppStoreState {
   setConflictStrategy: (strategy: ConflictStrategy) => void;
   updateQueueRetention: (partial: Partial<QueueRetentionPolicy>) => void;
   setLogFormat: (format: LogFormat) => void;
+  setLogLevel: (level: LogLevel) => void;
   setPendingConflictPrompt: (prompt: PendingConflictPrompt | null) => void;
   updateFontSettings: (partial: Partial<FontSettings>) => void;
   updateKeybinding: (id: ShortcutActionId, newCombo: string) => void;
@@ -301,6 +304,7 @@ export const useAppStore = create<AppStoreState>()(
         maxEvents: 50,
       },
       logFormat: "json",
+      logLevel: "error",
       pendingConflictPrompt: null,
       bookmarks: [],
       fontSettings: {
@@ -341,6 +345,7 @@ export const useAppStore = create<AppStoreState>()(
           queueRetention: { ...state.queueRetention, ...partial },
         })),
       setLogFormat: (format) => set({ logFormat: format }),
+      setLogLevel: (level) => set({ logLevel: level }),
       setPendingConflictPrompt: (prompt) =>
         set({ pendingConflictPrompt: prompt }),
 
@@ -774,6 +779,7 @@ export const useAppStore = create<AppStoreState>()(
             conflictStrategy: state.conflictStrategy,
             queueRetention: state.queueRetention,
             logFormat: state.logFormat,
+            logLevel: state.logLevel,
             bookmarks: state.bookmarks,
             fontSettings: state.fontSettings,
             keybindings: state.keybindings,
@@ -817,6 +823,13 @@ export const useAppStore = create<AppStoreState>()(
             cfg.logFormat === "json" || cfg.logFormat === "text"
               ? cfg.logFormat
               : state.logFormat,
+          logLevel:
+            cfg.logLevel === "debug" ||
+            cfg.logLevel === "info" ||
+            cfg.logLevel === "warn" ||
+            cfg.logLevel === "error"
+              ? cfg.logLevel
+              : state.logLevel,
           bookmarks: Array.isArray(cfg.bookmarks)
             ? cfg.bookmarks
             : state.bookmarks,
@@ -899,6 +912,7 @@ export const useAppStore = create<AppStoreState>()(
         conflictStrategy: state.conflictStrategy,
         queueRetention: state.queueRetention,
         logFormat: state.logFormat,
+        logLevel: state.logLevel,
         bookmarks: state.bookmarks,
         fontSettings: state.fontSettings,
         keybindings: state.keybindings,
