@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Rust File Manager (Tauri 2.x) 跨平台開發環境自動化安裝腳本 (PowerShell 7+ 支援 Windows / Linux / macOS)
 

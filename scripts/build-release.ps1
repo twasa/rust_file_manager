@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Rust File Manager (Tauri 2.x) 跨平台單一執行檔 (Portable) 與安裝包 (Installer) 自動化打包腳本
 
