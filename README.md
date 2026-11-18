@@ -69,15 +69,23 @@
 - **自動流水號編碼**：可自訂起始數字、遞增步長、補零位數（如 `001`, `002`）與插入位置（開頭、末端或完全取代主檔名）。
 - **即時預覽、衝突檢查與兩階段原子更名 + 一鍵復原 (Undo)**：執行前即時標示同名衝突；執行時採用兩階段暫存更名避免連號檔案互撞，並在完成後於頂部工具列提供「復原批次改名」按鈕。
 
+### 9. 完整儲存裝置支援與磁碟代號排序 (`src-tauri/src/fs_ops.rs` & `src/components/Sidebar.tsx`)
+- **支援 RAMDisk / ImDisk / Google Drive 雲端硬碟 / 網路磁碟機**：除了標準實體磁碟外，Windows 後端結合 Win32 API (`GetLogicalDrives`、`GetVolumeInformationW`、`GetDiskFreeSpaceExW`) 自動補齊所有邏輯掛載磁碟（如 ImDisk RAMDisk `R:`、Google 雲端硬碟 `G:` 與網路磁碟）。
+- **依磁碟代號字母嚴格排序**：側邊欄儲存空間統一採用 `代號: (磁碟標籤)` 格式（如 `C: (本機磁碟)`、`D: (D)`、`G: (Google Drive)`、`R: (RamDisk)`），並依磁碟字母由小到大整齊排列。
+
 ---
 
 ## 專案目錄結構
 
 ```text
 rust_file_manager/
-├── scripts/                      # 跨平台定版開發環境自動化安裝腳本
-│   ├── setup-dev-env.ps1         # PowerShell 7+ 安裝腳本 (Windows / Linux / macOS)
-│   └── setup-dev-env.sh          # Bash / Zsh 安裝腳本 (Linux / macOS / Windows Git Bash)
+├── .github/workflows/
+│   └── release.yml               # GitHub Actions 三平台 (Win/Linux/macOS) 自動打包與發布流水線
+├── scripts/                      # 跨平台開發環境安裝與 Release 打包腳本
+│   ├── build-release.ps1         # PowerShell 單一執行檔 (Portable) 與安裝包打包腳本
+│   ├── build-release.sh          # Bash 單一執行檔與安裝包打包腳本
+│   ├── setup-dev-env.ps1         # PowerShell 7+ 定版開發環境安裝腳本 (Windows / Linux / macOS)
+│   └── setup-dev-env.sh          # Bash / Zsh 定版開發環境安裝腳本 (Linux / macOS / Windows Git Bash)
 ├── src/                          # React 18 + TypeScript 前端原始碼
 │   ├── components/
 │   │   ├── BatchRenameModal.tsx  # 進階批次重新命名工具 (Regex/流水號/即時預覽)
@@ -123,6 +131,11 @@ rust_file_manager/
 | **Node.js LTS 執行環境** | `NODE_VERSION` / `-NodeVersion` | `26.13.1` |
 | **Fast Node Manager (`fnm`)** | `FNM_VERSION` / `-FnmVersion` | `1.39.0` |
 | **Tauri 2.x CLI (`@tauri-apps/cli`)** | `TAURI_CLI_VERSION` / `-TauriCliVersion` | `2.2.0` |
+
+> **工具鏈預設安裝位置（Windows）**：
+> - `rustc` / `cargo` / `fnm` 執行檔：`~/.cargo/bin` (`C:/Users/<User>/.cargo/bin`)
+> - `rustup` 工具鏈本體：`~/.rustup`
+> - `fnm` Node.js 版本與全域模組：`$env:APPDATA/fnm/aliases/default`（且 `setup-dev-env.ps1` 會自動寫入 Windows User PATH 與 PowerShell `$PROFILE`）
 
 ### 0. 一鍵自動化安裝開發環境
 
