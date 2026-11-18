@@ -41,19 +41,35 @@ foreach ($p in @($CargoBin, $FnmDefault)) {
     }
 }
 
+# 確保本地 node_modules 與 Tauri CLI 存在，若不存在則自動執行 npm install
+$TauriCmd = Join-Path $ProjectRoot "node_modules/.bin/tauri.cmd"
+$TauriBin = Join-Path $ProjectRoot "node_modules/.bin/tauri"
+if ((-not (Test-Path $TauriCmd)) -and (-not (Test-Path $TauriBin))) {
+    Write-Host "[INFO]  未偵測到本機 node_modules 或 Tauri CLI，自動執行 npm install..." -ForegroundColor Cyan
+    Push-Location $ProjectRoot
+    try {
+        npm install --no-fund --no-audit
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm install 失敗，退出碼: $LASTEXITCODE"
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 Write-Host "[INFO]  開始編譯 Rust File Manager 正式發行版 (Release Build)..." -ForegroundColor Cyan
 
 Push-Location $ProjectRoot
 try {
     if ($PortableOnly) {
         Write-Host "[INFO]  模式：僅產生免安裝單一執行檔 (--no-bundle)" -ForegroundColor Cyan
-        npx tauri build --no-bundle
+        npm run tauri -- build --no-bundle
     } elseif ($Target -ne "all") {
         Write-Host "[INFO]  模式：產生單一執行檔 + 指定安裝包 ($Target)" -ForegroundColor Cyan
-        npx tauri build --bundles $Target
+        npm run tauri -- build --bundles $Target
     } else {
         Write-Host "[INFO]  模式：產生單一執行檔 + 平台完整安裝包" -ForegroundColor Cyan
-        npx tauri build
+        npm run tauri -- build
     }
     if ($LASTEXITCODE -ne 0) {
         throw "Tauri build 失敗，退出碼: $LASTEXITCODE"
