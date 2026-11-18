@@ -61,6 +61,11 @@ export interface SystemLocations {
 export type TransferJobType = "copy" | "move" | "delete" | "trash";
 export type ConflictStrategy = "ask" | "overwrite" | "skip" | "rename";
 
+export interface PendingDeletePrompt {
+  jobType: "trash" | "delete";
+  items: FileEntry[];
+}
+
 export interface TransferConflictItem {
   sourcePath: string;
   targetPath: string;

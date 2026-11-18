@@ -47,6 +47,7 @@ import { ContextMenu, ContextMenuState } from "./components/ContextMenu";
 import { BatchRenameModal } from "./components/BatchRenameModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { ConflictDialogModal } from "./components/ConflictDialogModal";
+import { DeleteConfirmModal } from "./components/DeleteConfirmModal";
 import type {
   FileEntry,
   PaneId,
@@ -67,6 +68,9 @@ export const App: React.FC = () => {
   const showQueueDrawer = useAppStore((s) => s.showQueueDrawer);
   const setShowQueueDrawer = useAppStore((s) => s.setShowQueueDrawer);
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
+  const confirmDelete = useAppStore((s) => s.confirmDelete);
+  const pendingDeletePrompt = useAppStore((s) => s.pendingDeletePrompt);
+  const setPendingDeletePrompt = useAppStore((s) => s.setPendingDeletePrompt);
   const queueRetention = useAppStore((s) => s.queueRetention);
   const logFormat = useAppStore((s) => s.logFormat);
   const logLevel = useAppStore((s) => s.logLevel);
@@ -372,26 +376,40 @@ export const App: React.FC = () => {
         }
         case "trash_selected": {
           if (selectedEntries.length === 0) return;
-          await apiEnqueueTransfer(
-            "trash",
-            selectedEntries.map((e) => e.path),
-            null,
-            conflictStrategy
-          );
-          setShowQueueDrawer(true);
-          notify(`正在將 ${selectedEntries.length} 個項目移至資源回收桶`);
+          if (confirmDelete) {
+            setPendingDeletePrompt({
+              jobType: "trash",
+              items: selectedEntries,
+            });
+          } else {
+            await apiEnqueueTransfer(
+              "trash",
+              selectedEntries.map((e) => e.path),
+              null,
+              conflictStrategy
+            );
+            setShowQueueDrawer(true);
+            notify(`正在將 ${selectedEntries.length} 個項目移至資源回收桶`);
+          }
           break;
         }
         case "delete_permanent": {
           if (selectedEntries.length === 0) return;
-          await apiEnqueueTransfer(
-            "delete",
-            selectedEntries.map((e) => e.path),
-            null,
-            conflictStrategy
-          );
-          setShowQueueDrawer(true);
-          notify(`正在永久刪除 ${selectedEntries.length} 個項目`);
+          if (confirmDelete) {
+            setPendingDeletePrompt({
+              jobType: "delete",
+              items: selectedEntries,
+            });
+          } else {
+            await apiEnqueueTransfer(
+              "delete",
+              selectedEntries.map((e) => e.path),
+              null,
+              conflictStrategy
+            );
+            setShowQueueDrawer(true);
+            notify(`正在永久刪除 ${selectedEntries.length} 個項目`);
+          }
           break;
         }
         case "new_tab": {
@@ -481,6 +499,8 @@ export const App: React.FC = () => {
       currentEntries,
       activePane,
       conflictStrategy,
+      confirmDelete,
+      setPendingDeletePrompt,
       dualPaneEnabled,
       showQueueDrawer,
       showHiddenFiles,
@@ -512,7 +532,12 @@ export const App: React.FC = () => {
       ) {
         return;
       }
-      if (batchRenameModalOpen || settingsModalOpen) return;
+      if (
+        batchRenameModalOpen ||
+        settingsModalOpen ||
+        pendingDeletePrompt
+      )
+        return;
 
       // Enter 直接進入目錄或開啟檔案
       if (
@@ -548,6 +573,7 @@ export const App: React.FC = () => {
     keybindings,
     batchRenameModalOpen,
     settingsModalOpen,
+    pendingDeletePrompt,
     selectedEntries,
     activePane,
     navigateTab,
@@ -651,26 +677,40 @@ export const App: React.FC = () => {
           break;
         case "移至資源回收桶":
           if (sel.length > 0) {
-            await apiEnqueueTransfer(
-              "trash",
-              sel.map((s) => s.path),
-              null,
-              conflictStrategy
-            );
-            setShowQueueDrawer(true);
-            notify(`已排入佇列：移至資源回收桶 (${sel.length} 項)`);
+            if (confirmDelete) {
+              setPendingDeletePrompt({
+                jobType: "trash",
+                items: sel,
+              });
+            } else {
+              await apiEnqueueTransfer(
+                "trash",
+                sel.map((s) => s.path),
+                null,
+                conflictStrategy
+              );
+              setShowQueueDrawer(true);
+              notify(`已排入佇列：移至資源回收桶 (${sel.length} 項)`);
+            }
           }
           break;
         case "永久刪除 (無法復原)":
           if (sel.length > 0) {
-            await apiEnqueueTransfer(
-              "delete",
-              sel.map((s) => s.path),
-              null,
-              conflictStrategy
-            );
-            setShowQueueDrawer(true);
-            notify(`已排入佇列：永久刪除 (${sel.length} 項)`);
+            if (confirmDelete) {
+              setPendingDeletePrompt({
+                jobType: "delete",
+                items: sel,
+              });
+            } else {
+              await apiEnqueueTransfer(
+                "delete",
+                sel.map((s) => s.path),
+                null,
+                conflictStrategy
+              );
+              setShowQueueDrawer(true);
+              notify(`已排入佇列：永久刪除 (${sel.length} 項)`);
+            }
           }
           break;
         default: {
@@ -1061,6 +1101,9 @@ export const App: React.FC = () => {
 
       {/* 同名檔案衝突詢問對話框 */}
       <ConflictDialogModal onNotify={notify} />
+
+      {/* 刪除檔案防呆確認對話框 */}
+      <DeleteConfirmModal onNotify={notify} />
     </div>
   );
 };

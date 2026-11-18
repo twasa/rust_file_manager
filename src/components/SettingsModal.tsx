@@ -79,6 +79,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const resetAllSettings = useAppStore((s) => s.resetAllSettings);
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
   const setConflictStrategy = useAppStore((s) => s.setConflictStrategy);
+  const confirmDelete = useAppStore((s) => s.confirmDelete);
+  const setConfirmDelete = useAppStore((s) => s.setConfirmDelete);
   const queueRetention = useAppStore((s) => s.queueRetention);
   const updateQueueRetention = useAppStore((s) => s.updateQueueRetention);
   const logFormat = useAppStore((s) => s.logFormat);
@@ -585,6 +587,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* 檔案刪除安全防呆確認設定 */}
+              <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-slate-200">
+                      檔案刪除安全防呆確認 (Delete Confirmation)
+                    </div>
+                    <p className="text-slate-400 mt-0.5">
+                      按下鍵盤 Delete 鍵（移至回收桶）、Shift+Delete（永久刪除）或右鍵選單刪除時，先跳出確認對話視窗防範誤刪
+                    </p>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={confirmDelete}
+                      onChange={(e) => setConfirmDelete(e.target.checked)}
+                      className="rounded border-slate-600 accent-blue-500"
+                    />
+                    <span className="font-medium">
+                      {confirmDelete ? "啟用刪除確認 (預設)" : "直接刪除不詢問"}
+                    </span>
+                  </label>
                 </div>
               </div>
 
