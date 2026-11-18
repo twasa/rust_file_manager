@@ -20,6 +20,12 @@ if command -v fnm >/dev/null 2>&1; then
   eval "$(fnm env --shell bash)"
 fi
 
+# 確保本地 node_modules 與 Tauri CLI 存在，若不存在則自動執行 npm install
+if [[ ! -f "${PROJECT_ROOT}/node_modules/.bin/tauri" ]]; then
+  echo "[INFO] 未偵測到本機 node_modules 或 Tauri CLI，自動執行 npm install..."
+  (cd "${PROJECT_ROOT}" && npm install --no-fund --no-audit)
+fi
+
 PORTABLE_ONLY=0
 BUNDLES="all"
 
@@ -55,11 +61,11 @@ echo "[INFO] 開始編譯 Rust File Manager 正式發行版 (Release Build)..."
 cd "${PROJECT_ROOT}"
 
 if [[ "${PORTABLE_ONLY}" -eq 1 ]]; then
-  npx tauri build --no-bundle
+  npm run tauri -- build --no-bundle
 elif [[ "${BUNDLES}" != "all" ]]; then
-  npx tauri build --bundles "${BUNDLES}"
+  npm run tauri -- build --bundles "${BUNDLES}"
 else
-  npx tauri build
+  npm run tauri -- build
 fi
 
 rm -rf "${OUT_DIR}"
