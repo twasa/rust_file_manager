@@ -36,8 +36,9 @@ export const AVAILABLE_FONTS = [
 export const DEFAULT_KEYBINDINGS: KeybindingItem[] = [
   {
     id: "rename_selected",
-    label: "重新命名 (單筆原地 / 多筆批次)",
-    description: "MS Windows 標準：單選時觸發原地改名，多選時直接開啟批次重新命名工具",
+    label: "重新命名 (單選主檔名/再按選副檔名，多選批次)",
+    description:
+      "單選按第一次全選主檔名、再按一次全選副檔名、第三次全選完整名稱；多選時直接開啟批次重新命名工具",
     keyCombo: "F2",
     defaultCombo: "F2",
   },

@@ -30,7 +30,7 @@ import {
   apiRenameItem,
 } from "../api";
 import { useAppStore } from "../store/useAppStore";
-import { formatBytes, formatDateTime } from "../utils/formatters";
+import { formatBytes, formatDateTime, keyboardEventToCombo } from "../utils/formatters";
 import { FileEntryIcon } from "./FileEntryIcon";
 import { TabBar } from "./TabBar";
 import type {
@@ -70,6 +70,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
   const setActivePane = useAppStore((s) => s.setActivePane);
   const showHiddenFiles = useAppStore((s) => s.showHiddenFiles);
   const fontSettings = useAppStore((s) => s.fontSettings);
+  const keybindings = useAppStore((s) => s.keybindings);
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
   const dragPayload = useAppStore((s) => s.dragPayload);
   const setDragPayload = useAppStore((s) => s.setDragPayload);
@@ -99,6 +100,9 @@ export const FilePane: React.FC<FilePaneProps> = ({
   const [editingPath, setEditingPath] = useState(false);
   const [pathInput, setPathInput] = useState(activeTab?.path || "");
   const [inlineNameValue, setInlineNameValue] = useState("");
+  const [renameSelectionStage, setRenameSelectionStage] = useState<
+    "stem" | "ext" | "all"
+  >("stem");
   const [creatingMode, setCreatingMode] = useState<"folder" | "file" | null>(
     null
   );
@@ -107,6 +111,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
   const [dragOverPaneBg, setDragOverPaneBg] = useState(false);
 
   const parentRef = useRef<HTMLDivElement>(null);
+  const inlineInputRef = useRef<HTMLInputElement>(null);
 
   const loadDirectory = useCallback(
     async (targetPath: string, force = false) => {
@@ -193,7 +198,39 @@ export const FilePane: React.FC<FilePaneProps> = ({
     rowVirtualizer.measure();
   }, [fontSettings.rowHeightPx, rowVirtualizer]);
 
-  // 當觸發單筆 F2 原地改名時，初始化輸入框文字
+  // 依指定模式圈選原地改名輸入框範圍：
+  // - "stem": 僅全選主檔名 (不含 .ext)
+  // - "ext" : 僅全選副檔名 (不含 .)
+  // - "all" : 全選完整名稱 (主檔名 + .ext)
+  const applyInlineSelection = useCallback(
+    (
+      inputEl: HTMLInputElement | null,
+      text: string,
+      isDir: boolean,
+      stage: "stem" | "ext" | "all"
+    ) => {
+      if (!inputEl) return;
+      inputEl.focus();
+      const lastDot = !isDir ? text.lastIndexOf(".") : -1;
+      const hasValidExt = lastDot > 0 && lastDot < text.length - 1;
+
+      if (!hasValidExt || stage === "all") {
+        inputEl.setSelectionRange(0, text.length);
+      } else if (stage === "stem") {
+        inputEl.setSelectionRange(0, lastDot);
+      } else if (stage === "ext") {
+        inputEl.setSelectionRange(lastDot + 1, text.length);
+      }
+    },
+    []
+  );
+
+  const renameShortcutCombo = useMemo(() => {
+    const found = keybindings.find((k) => k.id === "rename_selected");
+    return (found?.keyCombo || "F2").toLowerCase();
+  }, [keybindings]);
+
+  // 當觸發單筆 F2 原地改名時，初始化輸入框文字並預設選取「主檔名 (stem)」
   useEffect(() => {
     if (inlineRenameTargetPath && listing) {
       const target = listing.entries.find(
@@ -201,9 +238,68 @@ export const FilePane: React.FC<FilePaneProps> = ({
       );
       if (target) {
         setInlineNameValue(target.name);
+        setRenameSelectionStage("stem");
+        requestAnimationFrame(() => {
+          applyInlineSelection(
+            inlineInputRef.current,
+            target.name,
+            target.isDir,
+            "stem"
+          );
+        });
       }
     }
-  }, [inlineRenameTargetPath, listing]);
+  }, [inlineRenameTargetPath, listing, applyInlineSelection]);
+
+  const handleInlineRenameKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    entry: FileEntry
+  ) => {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitInlineRename(entry);
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onSetInlineRenameTarget(null);
+      return;
+    }
+
+    // 正在改名時再次按下改名快速鍵 (預設 F2)：
+    // 若有副檔名則循環切換：全選主檔名 (stem) -> 全選副檔名 (ext) -> 全選完整檔名 (all) -> 全選主檔名 (stem)
+    const pressedCombo = keyboardEventToCombo(e).toLowerCase();
+    if (pressedCombo === renameShortcutCombo) {
+      e.preventDefault();
+      const lastDot = !entry.isDir ? inlineNameValue.lastIndexOf(".") : -1;
+      const hasValidExt = lastDot > 0 && lastDot < inlineNameValue.length - 1;
+
+      if (!hasValidExt) {
+        applyInlineSelection(
+          e.currentTarget,
+          inlineNameValue,
+          entry.isDir,
+          "all"
+        );
+        return;
+      }
+
+      const nextStage: "stem" | "ext" | "all" =
+        renameSelectionStage === "stem"
+          ? "ext"
+          : renameSelectionStage === "ext"
+          ? "all"
+          : "stem";
+      setRenameSelectionStage(nextStage);
+      applyInlineSelection(
+        e.currentTarget,
+        inlineNameValue,
+        entry.isDir,
+        nextStage
+      );
+    }
+  };
 
   const selectedSet = useMemo(
     () => new Set(activeTab?.selectedPaths || []),
@@ -650,10 +746,11 @@ export const FilePane: React.FC<FilePaneProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 p-3">
             {processedEntries.map((entry, index) => {
               const isSelected = selectedSet.has(entry.path);
+              const isRenaming = inlineRenameTargetPath === entry.path;
               return (
                 <div
                   key={entry.path}
-                  draggable
+                  draggable={!isRenaming}
                   onDragStart={(e) => {
                     e.stopPropagation();
                     const paths = isSelected
@@ -710,9 +807,22 @@ export const FilePane: React.FC<FilePaneProps> = ({
                   }`}
                 >
                   <FileEntryIcon kind={entry.kind} size={32} />
-                  <span className="mt-2 w-full truncate text-xs font-medium">
-                    {entry.name}
-                  </span>
+                  {isRenaming ? (
+                    <input
+                      ref={inlineInputRef}
+                      type="text"
+                      value={inlineNameValue}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setInlineNameValue(e.target.value)}
+                      onBlur={() => commitInlineRename(entry)}
+                      onKeyDown={(e) => handleInlineRenameKeyDown(e, entry)}
+                      className="mt-2 w-full px-1.5 py-0.5 rounded bg-slate-900 border border-blue-500 text-xs text-white text-center focus:outline-none"
+                    />
+                  ) : (
+                    <span className="mt-2 w-full truncate text-xs font-medium">
+                      {entry.name}
+                    </span>
+                  )}
                   <span className="text-[10px] text-slate-400 mt-0.5">
                     {entry.isDir ? "資料夾" : formatBytes(entry.size)}
                   </span>
@@ -812,17 +922,13 @@ export const FilePane: React.FC<FilePaneProps> = ({
                     />
                     {isRenaming ? (
                       <input
+                        ref={inlineInputRef}
                         type="text"
-                        autoFocus
                         value={inlineNameValue}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => setInlineNameValue(e.target.value)}
                         onBlur={() => commitInlineRename(entry)}
-                        onKeyDown={(e) => {
-                          e.stopPropagation();
-                          if (e.key === "Enter") commitInlineRename(entry);
-                          if (e.key === "Escape") onSetInlineRenameTarget(null);
-                        }}
+                        onKeyDown={(e) => handleInlineRenameKeyDown(e, entry)}
                         className="w-full px-2 py-0.5 rounded bg-slate-900 border border-blue-500 text-white focus:outline-none"
                       />
                     ) : (
