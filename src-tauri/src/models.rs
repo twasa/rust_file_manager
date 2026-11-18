@@ -127,9 +127,24 @@ pub enum TransferJobType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConflictStrategy {
+    Ask,
     Overwrite,
     Skip,
     Rename,
+}
+
+/// 傳入佇列前的同名衝突檢查項目
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferConflictItem {
+    pub source_path: String,
+    pub target_path: String,
+    pub name: String,
+    pub is_dir: bool,
+    pub source_size: u64,
+    pub target_size: u64,
+    pub source_modified_ms: u64,
+    pub target_modified_ms: u64,
 }
 
 /// 任務佇列狀態

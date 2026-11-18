@@ -9,7 +9,7 @@ use fs_ops::{get_system_locations, read_directory_cached, read_file_preview, FsC
 use models::{
     normalize_path_str, BatchRenameExecutionResult, BatchRenamePreviewItem, BatchRenameRule,
     ConflictStrategy, DirectoryListing, FileChecksumResult, FilePreviewData, SystemLocations,
-    TransferJobSnapshot, TransferJobType,
+    TransferConflictItem, TransferJobSnapshot, TransferJobType,
 };
 use queue::QueueManager;
 use std::fs;
@@ -108,6 +108,48 @@ fn cmd_rename_item(
     fs::rename(&src, &dst).map_err(|e| format!("重新命名失敗: {}", e))?;
     state.cache.invalidate_path(parent);
     Ok(normalize_path_str(&dst))
+}
+
+#[tauri::command]
+fn cmd_check_transfer_conflicts(
+    sources: Vec<String>,
+    destination: String,
+) -> Result<Vec<TransferConflictItem>, String> {
+    let dest_dir = PathBuf::from(&destination);
+    if !dest_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut conflicts = Vec::new();
+    for src_str in sources {
+        let src_path = PathBuf::from(&src_str);
+        if !src_path.exists() {
+            continue;
+        }
+        if let Some(fname) = src_path.file_name() {
+            let candidate = dest_dir.join(fname);
+            if candidate.exists() {
+                let src_meta = fs::metadata(&src_path).ok();
+                let dst_meta = fs::metadata(&candidate).ok();
+                let to_ms = |m: Option<&fs::Metadata>| -> u64 {
+                    m.and_then(|meta| meta.modified().ok())
+                        .and_then(|st| st.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0)
+                };
+                conflicts.push(TransferConflictItem {
+                    source_path: normalize_path_str(&src_path),
+                    target_path: normalize_path_str(&candidate),
+                    name: fname.to_string_lossy().to_string(),
+                    is_dir: src_path.is_dir(),
+                    source_size: src_meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                    target_size: dst_meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                    source_modified_ms: to_ms(src_meta.as_ref()),
+                    target_modified_ms: to_ms(dst_meta.as_ref()),
+                });
+            }
+        }
+    }
+    Ok(conflicts)
 }
 
 #[tauri::command]
@@ -331,6 +373,7 @@ pub fn run() {
             cmd_create_directory,
             cmd_create_file,
             cmd_rename_item,
+            cmd_check_transfer_conflicts,
             cmd_enqueue_transfer,
             cmd_list_transfer_jobs,
             cmd_control_transfer_job,

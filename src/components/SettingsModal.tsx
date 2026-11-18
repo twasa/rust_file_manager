@@ -453,12 +453,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   當執行大量檔案複製或跨目錄拖拉搬移時，若目標資料夾已存在同名檔案，背景佇列應採取的預設行為：
                 </p>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                   {(
                     [
                       {
+                        id: "ask",
+                        title: "每次詢問我如何處理 (預設)",
+                        desc: "當偵測到同名檔案時彈出對話視窗，讓您當場選擇改名、覆寫或略過",
+                      },
+                      {
                         id: "rename",
-                        title: "自動重新命名保留兩者 (推薦)",
+                        title: "自動重新命名保留兩者",
                         desc: "自動加上 _1, _2 後綴，確保不覆蓋任何既有資料且不中斷巨量佇列",
                       },
                       {

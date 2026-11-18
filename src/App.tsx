@@ -18,6 +18,7 @@ import {
   FolderKanban,
 } from "lucide-react";
 import {
+  apiCheckTransferConflicts,
   apiCompressToZip,
   apiComputeChecksum,
   apiCreateDirectory,
@@ -40,6 +41,7 @@ import { QueueDrawer } from "./components/QueueDrawer";
 import { ContextMenu, ContextMenuState } from "./components/ContextMenu";
 import { BatchRenameModal } from "./components/BatchRenameModal";
 import { SettingsModal } from "./components/SettingsModal";
+import { ConflictDialogModal } from "./components/ConflictDialogModal";
 import type {
   FileEntry,
   PaneId,
@@ -60,6 +62,9 @@ export const App: React.FC = () => {
   const showQueueDrawer = useAppStore((s) => s.showQueueDrawer);
   const setShowQueueDrawer = useAppStore((s) => s.setShowQueueDrawer);
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
+  const setPendingConflictPrompt = useAppStore(
+    (s) => s.setPendingConflictPrompt
+  );
   const fontSettings = useAppStore((s) => s.fontSettings);
   const updateFontSettings = useAppStore((s) => s.updateFontSettings);
   const keybindings = useAppStore((s) => s.keybindings);
@@ -176,12 +181,31 @@ export const App: React.FC = () => {
     currentTab?.selectedPaths.includes(e.path)
   );
 
-  // 執行佇列貼上
+  // 執行佇列貼上（若衝突策略為 ask 且有同名檔案，先彈出互動詢問對話框）
   const executePasteToDir = useCallback(
     async (targetDirPath: string) => {
       if (!clipboard || clipboard.paths.length === 0) return;
       const jobType = clipboard.mode === "cut" ? "move" : "copy";
       try {
+        if (conflictStrategy === "ask") {
+          const conflicts = await apiCheckTransferConflicts(
+            clipboard.paths,
+            targetDirPath
+          );
+          if (conflicts.length > 0) {
+            const sources = [...clipboard.paths];
+            if (clipboard.mode === "cut") {
+              setClipboard(null);
+            }
+            setPendingConflictPrompt({
+              jobType,
+              sources,
+              destination: targetDirPath,
+              conflicts,
+            });
+            return;
+          }
+        }
         await apiEnqueueTransfer(
           jobType,
           clipboard.paths,
@@ -201,7 +225,14 @@ export const App: React.FC = () => {
         notify(`貼上失敗: ${String(err)}`);
       }
     },
-    [clipboard, conflictStrategy, notify, setClipboard, setShowQueueDrawer]
+    [
+      clipboard,
+      conflictStrategy,
+      notify,
+      setClipboard,
+      setPendingConflictPrompt,
+      setShowQueueDrawer,
+    ]
   );
 
   // 執行快捷鍵對應動作
@@ -770,7 +801,7 @@ export const App: React.FC = () => {
                 ? "bg-blue-600/20 border-blue-500/50 text-blue-300"
                 : "bg-slate-950 border-slate-800 text-slate-300"
             }`}
-            title="開啟 / 關閉背景傳輸佇列懸浮視窗 (F3)"
+            title="開啟 / 關閉背景傳輸佇列懸浮視窗 (Ctrl+Q)"
           >
             <Activity size={13} />
             <span>佇列 ({transferJobs.length})</span>
@@ -808,6 +839,21 @@ export const App: React.FC = () => {
             if (!dragPayload || dragPayload.paths.length === 0) return;
             const sources = dragPayload.paths;
             setDragPayload(null);
+            if (conflictStrategy === "ask") {
+              const conflicts = await apiCheckTransferConflicts(
+                sources,
+                targetDirPath
+              );
+              if (conflicts.length > 0) {
+                setPendingConflictPrompt({
+                  jobType: "move",
+                  sources,
+                  destination: targetDirPath,
+                  conflicts,
+                });
+                return;
+              }
+            }
             await apiEnqueueTransfer(
               "move",
               sources,
@@ -911,6 +957,9 @@ export const App: React.FC = () => {
         onClose={() => setSettingsModalOpen(false)}
         onNotify={notify}
       />
+
+      {/* 同名檔案衝突詢問對話框 */}
+      <ConflictDialogModal onNotify={notify} />
     </div>
   );
 };

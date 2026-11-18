@@ -753,8 +753,8 @@ fn resolve_target_path(
         ConflictStrategy::Skip => Ok(TargetResolution::Skipped),
         // 當使用者選擇「直接覆寫 (Overwrite)」時，明確標記為 Overwritten
         ConflictStrategy::Overwrite => Ok(TargetResolution::Overwritten(candidate)),
-        // 當使用者選擇「自動重新命名保留兩者 (Rename)」時，產生 _1, _2 副本
-        ConflictStrategy::Rename => {
+        // 當使用者選擇「自動重新命名保留兩者 (Rename)」(或未在前端攔截的 Ask 預設回退為安全 Rename) 時，產生 _1, _2 副本
+        ConflictStrategy::Rename | ConflictStrategy::Ask => {
             let parent = candidate
                 .parent()
                 .ok_or_else(|| "無效的目標父目錄".to_string())?;

@@ -59,7 +59,18 @@ export interface SystemLocations {
 }
 
 export type TransferJobType = "copy" | "move" | "delete" | "trash";
-export type ConflictStrategy = "overwrite" | "skip" | "rename";
+export type ConflictStrategy = "ask" | "overwrite" | "skip" | "rename";
+
+export interface TransferConflictItem {
+  sourcePath: string;
+  targetPath: string;
+  name: string;
+  isDir: boolean;
+  sourceSize: number;
+  targetSize: number;
+  sourceModifiedMs: number;
+  targetModifiedMs: number;
+}
 export type JobStatus =
   | "queued"
   | "scanning"

@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  apiCheckTransferConflicts,
   apiCreateDirectory,
   apiCreateFile,
   apiEnqueueTransfer,
@@ -72,6 +73,9 @@ export const FilePane: React.FC<FilePaneProps> = ({
   const fontSettings = useAppStore((s) => s.fontSettings);
   const keybindings = useAppStore((s) => s.keybindings);
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
+  const setPendingConflictPrompt = useAppStore(
+    (s) => s.setPendingConflictPrompt
+  );
   const dragPayload = useAppStore((s) => s.dragPayload);
   const setDragPayload = useAppStore((s) => s.setDragPayload);
   const setShowQueueDrawer = useAppStore((s) => s.setShowQueueDrawer);
@@ -415,6 +419,21 @@ export const FilePane: React.FC<FilePaneProps> = ({
 
     const jobType = isCopyModifier ? "copy" : "move";
     try {
+      if (conflictStrategy === "ask") {
+        const conflicts = await apiCheckTransferConflicts(
+          validSources,
+          destDirPath
+        );
+        if (conflicts.length > 0) {
+          setPendingConflictPrompt({
+            jobType,
+            sources: validSources,
+            destination: destDirPath,
+            conflicts,
+          });
+          return;
+        }
+      }
       await apiEnqueueTransfer(
         jobType,
         validSources,

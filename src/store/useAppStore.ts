@@ -144,8 +144,8 @@ export const DEFAULT_KEYBINDINGS: KeybindingItem[] = [
     id: "toggle_queue",
     label: "開啟 / 關閉檔案傳輸佇列懸浮視窗",
     description: "快速顯示或隱藏右下角的背景檔案傳輸佇列懸浮視窗",
-    keyCombo: "F3",
-    defaultCombo: "F3",
+    keyCombo: "Ctrl+Q",
+    defaultCombo: "Ctrl+Q",
   },
   {
     id: "toggle_dual_pane",
@@ -206,6 +206,13 @@ interface ClipboardData {
   paths: string[];
 }
 
+export interface PendingConflictPrompt {
+  jobType: "copy" | "move";
+  sources: string[];
+  destination: string;
+  conflicts: import("../types").TransferConflictItem[];
+}
+
 interface AppStoreState {
   activePane: PaneId;
   dualPaneEnabled: boolean;
@@ -213,6 +220,7 @@ interface AppStoreState {
   showPreviewPanel: boolean;
   showQueueDrawer: boolean;
   conflictStrategy: ConflictStrategy;
+  pendingConflictPrompt: PendingConflictPrompt | null;
   bookmarks: { label: string; path: string }[];
   fontSettings: FontSettings;
   keybindings: KeybindingItem[];
@@ -230,6 +238,7 @@ interface AppStoreState {
   setShowPreviewPanel: (show: boolean) => void;
   setShowQueueDrawer: (show: boolean) => void;
   setConflictStrategy: (strategy: ConflictStrategy) => void;
+  setPendingConflictPrompt: (prompt: PendingConflictPrompt | null) => void;
   updateFontSettings: (partial: Partial<FontSettings>) => void;
   updateKeybinding: (id: ShortcutActionId, newCombo: string) => void;
   resetKeybindings: () => void;
@@ -278,7 +287,8 @@ export const useAppStore = create<AppStoreState>()(
       showHiddenFiles: false,
       showPreviewPanel: true,
       showQueueDrawer: false,
-      conflictStrategy: "rename",
+      conflictStrategy: "ask",
+      pendingConflictPrompt: null,
       bookmarks: [
         { label: "DevOps 工作區", path: "D:/devops_workspace" },
         { label: "個人專案區 (Private)", path: "D:/devops_workspace/private" },
@@ -315,6 +325,8 @@ export const useAppStore = create<AppStoreState>()(
       setShowPreviewPanel: (show) => set({ showPreviewPanel: show }),
       setShowQueueDrawer: (show) => set({ showQueueDrawer: show }),
       setConflictStrategy: (strategy) => set({ conflictStrategy: strategy }),
+      setPendingConflictPrompt: (prompt) =>
+        set({ pendingConflictPrompt: prompt }),
 
       updateFontSettings: (partial) =>
         set((state) => {
@@ -744,6 +756,7 @@ export const useAppStore = create<AppStoreState>()(
               ? cfg.showPreviewPanel
               : state.showPreviewPanel,
           conflictStrategy:
+            cfg.conflictStrategy === "ask" ||
             cfg.conflictStrategy === "overwrite" ||
             cfg.conflictStrategy === "skip" ||
             cfg.conflictStrategy === "rename"
@@ -769,12 +782,32 @@ export const useAppStore = create<AppStoreState>()(
     }),
     {
       name: "rust_file_manager_settings_v1",
+      version: 2,
+      migrate: (persistedState: unknown, version: number) => {
+        const p = (persistedState as Partial<AppStoreState>) || {};
+        if (version < 2) {
+          p.conflictStrategy = "ask";
+          if (Array.isArray(p.keybindings)) {
+            p.keybindings = p.keybindings.map((k) =>
+              k.id === "toggle_queue" && k.keyCombo === "F3"
+                ? { ...k, keyCombo: "Ctrl+Q", defaultCombo: "Ctrl+Q" }
+                : k
+            );
+          }
+        }
+        return p as AppStoreState;
+      },
       merge: (persistedState, currentState) => {
         const p = (persistedState as Partial<AppStoreState>) || {};
-        // 確保新增的預設快速鍵（如 F3 toggle_queue）自動合併進既有的 localStorage 設定中
         const mergedKeybindings = DEFAULT_KEYBINDINGS.map((defKb) => {
           const saved = p.keybindings?.find((k) => k.id === defKb.id);
-          return saved ? { ...defKb, keyCombo: saved.keyCombo } : defKb;
+          if (!saved) return defKb;
+          // 若舊設定仍為 F3，自動升級為 Ctrl+Q
+          const nextCombo =
+            defKb.id === "toggle_queue" && saved.keyCombo === "F3"
+              ? "Ctrl+Q"
+              : saved.keyCombo;
+          return { ...defKb, keyCombo: nextCombo };
         });
         return {
           ...currentState,

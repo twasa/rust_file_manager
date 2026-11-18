@@ -8,6 +8,7 @@ import type {
   FileChecksumResult,
   FilePreviewData,
   SystemLocations,
+  TransferConflictItem,
   TransferJobSnapshot,
   TransferJobType,
 } from "./types";
@@ -93,6 +94,17 @@ export async function apiRenameItem(
   newName: string
 ): Promise<string> {
   return invoke<string>("cmd_rename_item", { path, newName });
+}
+
+export async function apiCheckTransferConflicts(
+  sources: string[],
+  destination: string
+): Promise<TransferConflictItem[]> {
+  if (!isTauriRuntime()) return [];
+  return invoke<TransferConflictItem[]>("cmd_check_transfer_conflicts", {
+    sources,
+    destination,
+  });
 }
 
 export async function apiEnqueueTransfer(
