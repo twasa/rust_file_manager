@@ -183,6 +183,25 @@ pub struct TransferJobSnapshot {
     pub error_message: Option<String>,
 }
 
+/// 佇列任務紀錄保留策略設定
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueRetentionPolicy {
+    pub keep_history: bool,
+    pub retention_days: u32,
+    pub max_events: usize,
+}
+
+impl Default for QueueRetentionPolicy {
+    fn default() -> Self {
+        Self {
+            keep_history: true,
+            retention_days: 7,
+            max_events: 50,
+        }
+    }
+}
+
 /// 批次重新命名規則設定
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

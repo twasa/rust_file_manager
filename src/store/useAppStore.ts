@@ -6,6 +6,7 @@ import type {
   FontSettings,
   KeybindingItem,
   PaneId,
+  QueueRetentionPolicy,
   ShortcutActionId,
   SortDirection,
   SortField,
@@ -220,6 +221,7 @@ interface AppStoreState {
   showPreviewPanel: boolean;
   showQueueDrawer: boolean;
   conflictStrategy: ConflictStrategy;
+  queueRetention: QueueRetentionPolicy;
   pendingConflictPrompt: PendingConflictPrompt | null;
   bookmarks: { label: string; path: string }[];
   fontSettings: FontSettings;
@@ -238,10 +240,12 @@ interface AppStoreState {
   setShowPreviewPanel: (show: boolean) => void;
   setShowQueueDrawer: (show: boolean) => void;
   setConflictStrategy: (strategy: ConflictStrategy) => void;
+  updateQueueRetention: (partial: Partial<QueueRetentionPolicy>) => void;
   setPendingConflictPrompt: (prompt: PendingConflictPrompt | null) => void;
   updateFontSettings: (partial: Partial<FontSettings>) => void;
   updateKeybinding: (id: ShortcutActionId, newCombo: string) => void;
   resetKeybindings: () => void;
+  resetAllSettings: () => void;
   addBookmark: (label: string, path: string) => void;
   removeBookmark: (path: string) => void;
 
@@ -288,6 +292,11 @@ export const useAppStore = create<AppStoreState>()(
       showPreviewPanel: true,
       showQueueDrawer: false,
       conflictStrategy: "ask",
+      queueRetention: {
+        keepHistory: true,
+        retentionDays: 7,
+        maxEvents: 50,
+      },
       pendingConflictPrompt: null,
       bookmarks: [
         { label: "DevOps 工作區", path: "D:/devops_workspace" },
@@ -326,6 +335,10 @@ export const useAppStore = create<AppStoreState>()(
       setShowPreviewPanel: (show) => set({ showPreviewPanel: show }),
       setShowQueueDrawer: (show) => set({ showQueueDrawer: show }),
       setConflictStrategy: (strategy) => set({ conflictStrategy: strategy }),
+      updateQueueRetention: (partial) =>
+        set((state) => ({
+          queueRetention: { ...state.queueRetention, ...partial },
+        })),
       setPendingConflictPrompt: (prompt) =>
         set({ pendingConflictPrompt: prompt }),
 
@@ -346,6 +359,31 @@ export const useAppStore = create<AppStoreState>()(
         })),
 
       resetKeybindings: () => set({ keybindings: DEFAULT_KEYBINDINGS }),
+
+      resetAllSettings: () =>
+        set((state) => ({
+          dualPaneEnabled: false,
+          showHiddenFiles: false,
+          showPreviewPanel: true,
+          conflictStrategy: "ask",
+          queueRetention: {
+            keepHistory: true,
+            retentionDays: 7,
+            maxEvents: 50,
+          },
+          bookmarks: [
+            { label: "DevOps 工作區", path: "D:/devops_workspace" },
+            { label: "個人專案區 (Private)", path: "D:/devops_workspace/private" },
+          ],
+          fontSettings: {
+            fontFamily: AVAILABLE_FONTS[0].value,
+            fontSizePx: 14,
+            rowHeightPx: 34,
+            uiFontSizePx: 14,
+          },
+          keybindings: DEFAULT_KEYBINDINGS,
+          refreshVersion: state.refreshVersion + 1,
+        })),
 
       addBookmark: (label, path) =>
         set((state) => {
@@ -728,6 +766,7 @@ export const useAppStore = create<AppStoreState>()(
             showHiddenFiles: state.showHiddenFiles,
             showPreviewPanel: state.showPreviewPanel,
             conflictStrategy: state.conflictStrategy,
+            queueRetention: state.queueRetention,
             bookmarks: state.bookmarks,
             fontSettings: state.fontSettings,
             keybindings: state.keybindings,
@@ -763,6 +802,10 @@ export const useAppStore = create<AppStoreState>()(
             cfg.conflictStrategy === "rename"
               ? cfg.conflictStrategy
               : state.conflictStrategy,
+          queueRetention:
+            cfg.queueRetention && typeof cfg.queueRetention === "object"
+              ? { ...state.queueRetention, ...cfg.queueRetention }
+              : state.queueRetention,
           bookmarks: Array.isArray(cfg.bookmarks)
             ? cfg.bookmarks
             : state.bookmarks,
@@ -818,10 +861,15 @@ export const useAppStore = create<AppStoreState>()(
             currentState.fontSettings.uiFontSizePx ||
             14,
         };
+        const mergedQueueRetention: QueueRetentionPolicy = {
+          ...currentState.queueRetention,
+          ...(p.queueRetention || {}),
+        };
         return {
           ...currentState,
           ...p,
           fontSettings: mergedFontSettings,
+          queueRetention: mergedQueueRetention,
           keybindings: mergedKeybindings,
         };
       },
@@ -830,6 +878,7 @@ export const useAppStore = create<AppStoreState>()(
         showHiddenFiles: state.showHiddenFiles,
         showPreviewPanel: state.showPreviewPanel,
         conflictStrategy: state.conflictStrategy,
+        queueRetention: state.queueRetention,
         bookmarks: state.bookmarks,
         fontSettings: state.fontSettings,
         keybindings: state.keybindings,

@@ -46,6 +46,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     type: "ok" | "err";
     text: string;
   } | null>(null);
+  const [confirmResetAll, setConfirmResetAll] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,14 +55,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const keybindings = useAppStore((s) => s.keybindings);
   const updateKeybinding = useAppStore((s) => s.updateKeybinding);
   const resetKeybindings = useAppStore((s) => s.resetKeybindings);
+  const resetAllSettings = useAppStore((s) => s.resetAllSettings);
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
   const setConflictStrategy = useAppStore((s) => s.setConflictStrategy);
+  const queueRetention = useAppStore((s) => s.queueRetention);
+  const updateQueueRetention = useAppStore((s) => s.updateQueueRetention);
   const exportConfigJson = useAppStore((s) => s.exportConfigJson);
   const importConfigJson = useAppStore((s) => s.importConfigJson);
 
   useEffect(() => {
     if (visible) {
       setConfigStatusMsg(null);
+      setConfirmResetAll(false);
       apiGetDefaultConfigPath()
         .then((p) => {
           setConfigPathInput((prev) => prev || p);
@@ -525,6 +530,138 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   ))}
                 </div>
               </div>
+
+              {/* 佇列任務歷史紀錄 (Events) 保留策略設定 */}
+              <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-slate-200">
+                      佇列任務歷史紀錄 (Queue Events) 保留設定
+                    </div>
+                    <p className="text-slate-400 mt-0.5">
+                      設定已完成的檔案傳輸任務事件是否保留在佇列清單中，以及保留的天數與最大筆數上限
+                    </p>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={queueRetention.keepHistory}
+                      onChange={(e) =>
+                        updateQueueRetention({ keepHistory: e.target.checked })
+                      }
+                      className="rounded border-slate-600 accent-blue-500"
+                    />
+                    <span className="font-medium">
+                      {queueRetention.keepHistory
+                        ? "保留歷史事件紀錄"
+                        : "不保留 (完成後自動清除)"}
+                    </span>
+                  </label>
+                </div>
+
+                {queueRetention.keepHistory && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-800/80">
+                    <div className="p-3.5 rounded-lg bg-slate-900/70 border border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-slate-200">
+                          保留天數上限 (Days)
+                        </span>
+                        <span className="text-blue-400 font-mono font-semibold">
+                          {queueRetention.retentionDays} 天
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={queueRetention.retentionDays}
+                          onChange={(e) =>
+                            updateQueueRetention({
+                              retentionDays: Math.max(
+                                1,
+                                Math.min(365, Number(e.target.value) || 1)
+                              ),
+                            })
+                          }
+                          className="w-24 px-2.5 py-1.5 rounded bg-slate-950 border border-slate-700 text-white font-mono"
+                        />
+                        <div className="flex items-center gap-1">
+                          {[1, 3, 7, 14, 30].map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() =>
+                                updateQueueRetention({ retentionDays: d })
+                              }
+                              className={`px-2 py-1 rounded text-[11px] ${
+                                queueRetention.retentionDays === d
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                              }`}
+                            >
+                              {d}天
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        超過 {queueRetention.retentionDays} 天的已完成/已取消事件將自動從佇列清理
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-lg bg-slate-900/70 border border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-slate-200">
+                          保留最大筆數上限 (Max Events)
+                        </span>
+                        <span className="text-emerald-400 font-mono font-semibold">
+                          最多 {queueRetention.maxEvents} 筆
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={1000}
+                          value={queueRetention.maxEvents}
+                          onChange={(e) =>
+                            updateQueueRetention({
+                              maxEvents: Math.max(
+                                1,
+                                Math.min(1000, Number(e.target.value) || 1)
+                              ),
+                            })
+                          }
+                          className="w-24 px-2.5 py-1.5 rounded bg-slate-950 border border-slate-700 text-white font-mono"
+                        />
+                        <div className="flex items-center gap-1">
+                          {[10, 30, 50, 100, 200].map((cnt) => (
+                            <button
+                              key={cnt}
+                              type="button"
+                              onClick={() =>
+                                updateQueueRetention({ maxEvents: cnt })
+                              }
+                              className={`px-2 py-1 rounded text-[11px] ${
+                                queueRetention.maxEvents === cnt
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                              }`}
+                            >
+                              {cnt}筆
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        當歷史紀錄超過 {queueRetention.maxEvents} 筆時，自動淘汰最舊的事件
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -654,7 +791,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end px-5 py-3 border-t border-slate-800 bg-slate-950/80">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-slate-800 bg-slate-950/80 text-xs">
+          <div className="flex items-center gap-2">
+            {!confirmResetAll ? (
+              <button
+                type="button"
+                onClick={() => setConfirmResetAll(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 transition-colors"
+              >
+                <RotateCcw size={13} />
+                <span>將所有設定恢復預設值</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 bg-rose-950/50 border border-rose-500/40 px-3 py-1 rounded-lg">
+                <span className="text-rose-200 font-medium">
+                  確定將字型、快速鍵、佇列與面板設定全部恢復預設值？
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetAllSettings();
+                    setConfirmResetAll(false);
+                    onNotify?.("已將所有偏好設定恢復為出廠預設值");
+                  }}
+                  className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-semibold"
+                >
+                  確定重設
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmResetAll(false)}
+                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+                >
+                  取消
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={onClose}

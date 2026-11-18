@@ -30,6 +30,7 @@ import {
   apiOpenItem,
   apiOpenTerminal,
   apiRevealInShell,
+  apiSetQueueRetention,
   apiUndoBatchRename,
 } from "./api";
 import { useAppStore } from "./store/useAppStore";
@@ -62,6 +63,7 @@ export const App: React.FC = () => {
   const showQueueDrawer = useAppStore((s) => s.showQueueDrawer);
   const setShowQueueDrawer = useAppStore((s) => s.setShowQueueDrawer);
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
+  const queueRetention = useAppStore((s) => s.queueRetention);
   const setPendingConflictPrompt = useAppStore(
     (s) => s.setPendingConflictPrompt
   );
@@ -137,6 +139,14 @@ export const App: React.FC = () => {
     document.documentElement.style.fontFamily = fontSettings.fontFamily;
     document.body.style.fontFamily = fontSettings.fontFamily;
   }, [fontSettings.fontFamily, fontSettings.uiFontSizePx]);
+
+  // 將佇列事件保留策略同步至 Rust 後端並套用過期/超量裁剪
+  useEffect(() => {
+    if (!queueRetention) return;
+    apiSetQueueRetention(queueRetention)
+      .then((jobs) => setTransferJobs(jobs))
+      .catch(console.error);
+  }, [queueRetention, setTransferJobs]);
 
   // 初始化系統掛載點與背景佇列事件監聽
   useEffect(() => {

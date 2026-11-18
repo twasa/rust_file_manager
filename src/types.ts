@@ -100,6 +100,12 @@ export interface TransferJobSnapshot {
   errorMessage: string | null;
 }
 
+export interface QueueRetentionPolicy {
+  keepHistory: boolean;
+  retentionDays: number;
+  maxEvents: number;
+}
+
 export interface BatchRenameRule {
   findText: string;
   replaceText: string;

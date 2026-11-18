@@ -7,6 +7,7 @@ import type {
   DirectoryListing,
   FileChecksumResult,
   FilePreviewData,
+  QueueRetentionPolicy,
   SystemLocations,
   TransferConflictItem,
   TransferJobSnapshot,
@@ -133,6 +134,15 @@ export async function apiControlTransferJob(
   return invoke<TransferJobSnapshot[]>("cmd_control_transfer_job", {
     jobId,
     action,
+  });
+}
+
+export async function apiSetQueueRetention(
+  policy: QueueRetentionPolicy
+): Promise<TransferJobSnapshot[]> {
+  if (!isTauriRuntime()) return [];
+  return invoke<TransferJobSnapshot[]>("cmd_set_queue_retention", {
+    policy,
   });
 }
 

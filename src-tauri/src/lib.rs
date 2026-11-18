@@ -8,8 +8,8 @@ use batch_rename::{execute_batch_rename, preview_batch_rename, undo_batch_rename
 use fs_ops::{get_system_locations, read_directory_cached, read_file_preview, FsCacheState};
 use models::{
     normalize_path_str, BatchRenameExecutionResult, BatchRenamePreviewItem, BatchRenameRule,
-    ConflictStrategy, DirectoryListing, FileChecksumResult, FilePreviewData, SystemLocations,
-    TransferConflictItem, TransferJobSnapshot, TransferJobType,
+    ConflictStrategy, DirectoryListing, FileChecksumResult, FilePreviewData, QueueRetentionPolicy,
+    SystemLocations, TransferConflictItem, TransferJobSnapshot, TransferJobType,
 };
 use queue::QueueManager;
 use std::fs;
@@ -181,6 +181,14 @@ fn cmd_control_transfer_job(
     action: String,
 ) -> Result<Vec<TransferJobSnapshot>, String> {
     state.queue.control_job(&job_id, &action)
+}
+
+#[tauri::command]
+fn cmd_set_queue_retention(
+    state: State<'_, AppState>,
+    policy: QueueRetentionPolicy,
+) -> Vec<TransferJobSnapshot> {
+    state.queue.set_retention_policy(policy)
 }
 
 #[tauri::command]
@@ -377,6 +385,7 @@ pub fn run() {
             cmd_enqueue_transfer,
             cmd_list_transfer_jobs,
             cmd_control_transfer_job,
+            cmd_set_queue_retention,
             cmd_preview_batch_rename,
             cmd_execute_batch_rename,
             cmd_undo_batch_rename,

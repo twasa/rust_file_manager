@@ -1,6 +1,7 @@
 use crate::fs_ops::FsCacheState;
 use crate::models::{
-    normalize_path_str, ConflictStrategy, JobStatus, TransferJobSnapshot, TransferJobType,
+    normalize_path_str, ConflictStrategy, JobStatus, QueueRetentionPolicy, TransferJobSnapshot,
+    TransferJobType,
 };
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -50,6 +51,7 @@ impl JobControl {
 pub struct QueueManager {
     jobs: Arc<Mutex<Vec<TransferJobSnapshot>>>,
     controls: Arc<Mutex<HashMap<String, Arc<JobControl>>>>,
+    retention: Mutex<QueueRetentionPolicy>,
     sender: mpsc::UnboundedSender<String>,
     cache_state: Arc<FsCacheState>,
     app_handle: Mutex<Option<AppHandle>>,
@@ -64,6 +66,7 @@ impl QueueManager {
         let manager = Arc::new(Self {
             jobs,
             controls,
+            retention: Mutex::new(QueueRetentionPolicy::default()),
             sender: tx,
             cache_state,
             app_handle: Mutex::new(None),
@@ -136,6 +139,59 @@ impl QueueManager {
         self.emit_update();
 
         snapshot
+    }
+
+    pub fn set_retention_policy(&self, policy: QueueRetentionPolicy) -> Vec<TransferJobSnapshot> {
+        *self.retention.lock() = policy;
+        self.apply_retention_prune();
+        self.emit_update();
+        self.list_jobs()
+    }
+
+    pub fn apply_retention_prune(&self) {
+        let policy = *self.retention.lock();
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let max_age_ms = (policy.retention_days.max(1) as u64) * 24 * 60 * 60 * 1000;
+        let max_events = policy.max_events.max(1);
+
+        let mut guard = self.jobs.lock();
+        let mut finished_seen = 0usize;
+        let mut removed_ids = Vec::new();
+
+        guard.retain(|j| {
+            let is_finished = matches!(
+                j.status,
+                JobStatus::Completed | JobStatus::Cancelled | JobStatus::Failed
+            );
+            if !is_finished {
+                return true;
+            }
+            if !policy.keep_history {
+                removed_ids.push(j.id.clone());
+                return false;
+            }
+            if now_ms.saturating_sub(j.created_at_ms) > max_age_ms {
+                removed_ids.push(j.id.clone());
+                return false;
+            }
+            finished_seen += 1;
+            if finished_seen > max_events {
+                removed_ids.push(j.id.clone());
+                return false;
+            }
+            true
+        });
+
+        drop(guard);
+        if !removed_ids.is_empty() {
+            let mut ctrl_guard = self.controls.lock();
+            for id in removed_ids {
+                ctrl_guard.remove(&id);
+            }
+        }
     }
 
     pub fn list_jobs(&self) -> Vec<TransferJobSnapshot> {
@@ -340,10 +396,25 @@ impl QueueManager {
                         j.current_file = summary;
                     });
                     self.emit_update();
+
+                    if !self.retention.lock().keep_history {
+                        let mgr = self.jobs.clone();
+                        let ctrls = self.controls.clone();
+                        let jid = job_id.to_string();
+                        std::thread::sleep(Duration::from_millis(800));
+                        mgr.lock().retain(|j| j.id != jid);
+                        ctrls.lock().remove(&jid);
+                        self.emit_update();
+                    } else {
+                        self.apply_retention_prune();
+                        self.emit_update();
+                    }
                 }
             }
             Err(err) => {
                 self.fail_job(job_id, err);
+                self.apply_retention_prune();
+                self.emit_update();
             }
         }
     }
