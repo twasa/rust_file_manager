@@ -239,17 +239,28 @@ export const FilePane: React.FC<FilePaneProps> = ({
       if (target) {
         setInlineNameValue(target.name);
         setRenameSelectionStage("stem");
-        requestAnimationFrame(() => {
-          applyInlineSelection(
-            inlineInputRef.current,
-            target.name,
-            target.isDir,
-            "stem"
-          );
-        });
       }
     }
-  }, [inlineRenameTargetPath, listing, applyInlineSelection]);
+  }, [inlineRenameTargetPath, listing]);
+
+  // 當 inlineNameValue 首次填入後，確保 DOM input value 已更新，再執行聚焦與圈選主檔名
+  useEffect(() => {
+    if (!inlineRenameTargetPath || !listing || !inlineNameValue) return;
+    const target = listing.entries.find(
+      (e) => e.path === inlineRenameTargetPath
+    );
+    if (!target || inlineNameValue !== target.name) return;
+
+    const timer = setTimeout(() => {
+      applyInlineSelection(
+        inlineInputRef.current,
+        target.name,
+        target.isDir,
+        "stem"
+      );
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [inlineRenameTargetPath, inlineNameValue, listing, applyInlineSelection]);
 
   const handleInlineRenameKeyDown = (
     e: React.KeyboardEvent<HTMLInputElement>,
@@ -263,6 +274,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
     }
     if (e.key === "Escape") {
       e.preventDefault();
+      setInlineNameValue("");
       onSetInlineRenameTarget(null);
       return;
     }
@@ -356,6 +368,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
 
   const commitInlineRename = async (entry: FileEntry) => {
     const trimmed = inlineNameValue.trim();
+    setInlineNameValue("");
     onSetInlineRenameTarget(null);
     if (!trimmed || trimmed === entry.name) return;
     try {
