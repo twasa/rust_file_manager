@@ -163,7 +163,41 @@ npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-### 4. 打包跨平台獨立安裝檔 / 執行檔
+### 4. 打包跨平台單一執行檔 (Portable) 與原生安裝包 (Installer)
+
+Tauri 2.x 會將前端所有靜態資源（HTML / CSS / JS）直接嵌入編譯進 Rust 二進位執行檔中，並已於 `src-tauri/Cargo.toml` 啟用 `LTO`、`strip` 與體積最佳化（單一執行檔僅約 **4 ~ 8 MB**）。
+
+#### 支援產出的格式一覽
+| 目標作業系統 | 免安裝單一執行檔 (Portable) | 系統原生安裝包 (Installer) |
+| :--- | :--- | :--- |
+| **Microsoft Windows** | `rust-file-manager-portable-windows-x64.exe` (單一 `.exe` 直接雙擊執行) | NSIS `*-setup.exe`、Windows Installer `*.msi` |
+| **Linux** | `rust-file-manager-portable-linux-x86_64` / `*.AppImage` (單一檔案免安裝) | Debian/Ubuntu `*.deb`、Fedora/RHEL `*.rpm`、`*.AppImage` |
+| **macOS** | `Rust File Manager.app` | Apple Disk Image `*.dmg` (支援 Intel `x64` 與 Apple Silicon `arm64`) |
+
+#### 使用自動化打包腳本（自動匯出至 `release-artifacts/` 並產生 `SHA256SUMS.txt`）
+
+**PowerShell (`pwsh`)**：
 ```powershell
-npm run tauri build
+# 1. 僅快速編譯「免安裝單一執行檔 (Portable .exe)」（不打包安裝程式，速度最快）
+./scripts/build-release.ps1 -PortableOnly
+# 或使用 npm 指令: npm run package:portable
+
+# 2. 完整編譯「免安裝單一執行檔 + 平台所有安裝包 (.exe / .msi / .deb / .dmg)」
+./scripts/build-release.ps1
+# 或使用 npm 指令: npm run package:all
+
+# 3. 僅打包指定格式的安裝包 (例如只打包 Windows NSIS 安裝包)
+./scripts/build-release.ps1 -Target nsis
 ```
+
+**Bash / Zsh (`bash`)**：
+```bash
+# 1. 僅快速編譯免安裝單一執行檔
+./scripts/build-release.sh --portable-only
+
+# 2. 完整編譯單一執行檔與當前系統所有安裝包 (.deb / .rpm / .AppImage / .dmg)
+./scripts/build-release.sh
+```
+
+#### 跨平台雲端自動打包 (GitHub Actions CI/CD)
+專案已內建 [`.github/workflows/release.yml`](.github/workflows/release.yml)，只要推送版本標籤（例如 `git tag v0.1.0 && git push origin v0.1.0`）或在 GitHub Actions 手動觸發，就會自動平行啟動 **Windows、Ubuntu Linux、macOS (Intel & Apple Silicon)** 四台雲端建置機，一次產出三大平台的所有安裝包與單一執行檔並發布至 GitHub Releases。
