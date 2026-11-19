@@ -37,7 +37,12 @@ import {
   apiUndoBatchRename,
   apiWriteFrontendLog,
 } from "./api";
-import { useAppStore } from "./store/useAppStore";
+import {
+  useAppStore,
+  enableConfigAutoSave,
+  flushAutoSave,
+  saveSettingsToFile,
+} from "./store/useAppStore";
 import { keyboardEventToCombo } from "./utils/formatters";
 import { Sidebar } from "./components/Sidebar";
 import { FilePane } from "./components/FilePane";
@@ -151,15 +156,36 @@ export const App: React.FC = () => {
     document.body.style.fontFamily = fontSettings.fontFamily;
   }, [fontSettings.fontFamily, fontSettings.uiFontSizePx]);
 
-  // 初次掛載時自動從磁碟載入 settings.json (若存在)
+  // 初次掛載時自動從磁碟載入 settings.json (若存在) 並啟動自動儲存同步
   useEffect(() => {
     apiLoadConfigFile()
       .then((rawJson) => {
         if (rawJson) {
           useAppStore.getState().importConfigJson(rawJson);
+        } else {
+          // 若設定檔尚未建立，將預設設定存入磁碟 settings.json
+          saveSettingsToFile().catch(console.error);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("Failed to load initial settings:", err);
+      })
+      .finally(() => {
+        // 載入完成後啟動變更自動儲存至磁碟防抖機制
+        enableConfigAutoSave();
+      });
+  }, []);
+
+  // 視窗關閉或重整前立即刷新未完成之磁碟存檔
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushAutoSave();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      flushAutoSave();
+    };
   }, []);
 
   // 同步日誌格式與記錄等級設定並攔截前端全域未處理錯誤寫入後端結構化日誌檔

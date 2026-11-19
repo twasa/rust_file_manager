@@ -327,6 +327,7 @@ pub fn ensure_default_config_and_logs(logger: &AppLogger) -> PathBuf {
                 "dualPaneEnabled": false,
                 "showHiddenFiles": false,
                 "showPreviewPanel": false,
+                "confirmDelete": true,
                 "conflictStrategy": "ask",
                 "queueRetention": {
                     "retainEvents": true,
@@ -656,6 +657,7 @@ mod tests {
             "app": "rust-file-manager",
             "schemaVersion": 1,
             "settings": {
+                "confirmDelete": true,
                 "logLevel": "error"
             }
         });
@@ -667,6 +669,10 @@ mod tests {
         assert_eq!(
             parsed.get("settings").and_then(|s| s.get("logLevel")).and_then(|v| v.as_str()),
             Some("error")
+        );
+        assert_eq!(
+            parsed.get("settings").and_then(|s| s.get("confirmDelete")).and_then(|v| v.as_bool()),
+            Some(true)
         );
 
         let _ = fs::remove_dir_all(&temp_dir);

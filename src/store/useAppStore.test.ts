@@ -1,10 +1,22 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { useAppStore } from "./useAppStore";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  useAppStore,
+  enableConfigAutoSave,
+  disableConfigAutoSave,
+  isConfigAutoSaveEnabled,
+  saveSettingsToFile,
+  flushAutoSave,
+} from "./useAppStore";
 import type { FileEntry } from "../types";
 
 describe("useAppStore delete confirmation and settings", () => {
   beforeEach(() => {
+    disableConfigAutoSave();
     useAppStore.getState().resetAllSettings();
+  });
+
+  afterEach(() => {
+    disableConfigAutoSave();
   });
 
   it("defaults confirmDelete to true and pendingDeletePrompt to null", () => {
@@ -63,5 +75,32 @@ describe("useAppStore delete confirmation and settings", () => {
 
     useAppStore.getState().importConfigJson(jsonStr);
     expect(useAppStore.getState().confirmDelete).toBe(false);
+  });
+
+  it("can explicitly save settings to file and return target path", async () => {
+    useAppStore.getState().setConflictStrategy("overwrite");
+    const path = await saveSettingsToFile("custom/settings.json");
+    expect(path).toBe("custom/settings.json");
+  });
+
+  it("enables and disables config auto-save state", () => {
+    expect(isConfigAutoSaveEnabled()).toBe(false);
+    enableConfigAutoSave();
+    expect(isConfigAutoSaveEnabled()).toBe(true);
+    disableConfigAutoSave();
+    expect(isConfigAutoSaveEnabled()).toBe(false);
+  });
+
+  it("triggers auto-save debounce and flush when settings change", async () => {
+    enableConfigAutoSave();
+
+    // 修改字型設定
+    useAppStore.getState().updateFontSettings({ uiFontSizePx: 18 });
+    const saved = await flushAutoSave();
+    expect(saved).toBeDefined();
+
+    const json = useAppStore.getState().exportConfigJson();
+    const parsed = JSON.parse(json);
+    expect(parsed.settings.fontSettings.uiFontSizePx).toBe(18);
   });
 });
