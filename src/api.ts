@@ -17,7 +17,7 @@ import type {
   TransferJobType,
 } from "./types";
 
-const isTauriRuntime = (): boolean => {
+export const isTauriRuntime = (): boolean => {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 };
 
@@ -237,6 +237,31 @@ export async function apiLoadConfigFile(sourcePath?: string): Promise<string> {
   return invoke<string>("cmd_load_config_file", {
     sourcePath: sourcePath || null,
   });
+}
+
+export interface ImportConfigResult {
+  path: string;
+  content: string;
+}
+
+export async function apiExportConfigWithDialog(
+  content: string,
+  defaultFilename?: string
+): Promise<string | null> {
+  if (!isTauriRuntime()) {
+    return defaultFilename || "rfm-settings.json";
+  }
+  return invoke<string | null>("cmd_export_config_with_dialog", {
+    content,
+    defaultFilename: defaultFilename || null,
+  });
+}
+
+export async function apiImportConfigWithDialog(): Promise<ImportConfigResult | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+  return invoke<ImportConfigResult | null>("cmd_import_config_with_dialog");
 }
 
 export async function apiGetLogFilePath(): Promise<string> {

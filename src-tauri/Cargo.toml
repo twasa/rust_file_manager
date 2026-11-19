@@ -33,6 +33,7 @@ parking_lot = "0.12"
 dirs = "5.0"
 thiserror = "2.0"
 walkdir = "2.5"
+rfd = "0.15"
 
 [profile.release]
 panic = "abort"
