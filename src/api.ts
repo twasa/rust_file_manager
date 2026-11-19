@@ -212,7 +212,7 @@ export async function apiClearCache(): Promise<void> {
 
 export async function apiGetDefaultConfigPath(): Promise<string> {
   if (!isTauriRuntime()) {
-    return "D:/devops_workspace/private/rust_file_manager/rfm-settings.json";
+    return "D:/devops_workspace/private/rust_file_manager/settings.json";
   }
   return invoke<string>("cmd_get_default_config_path");
 }
@@ -221,6 +221,9 @@ export async function apiSaveConfigFile(
   content: string,
   targetPath?: string
 ): Promise<string> {
+  if (!isTauriRuntime()) {
+    return targetPath || "D:/devops_workspace/private/rust_file_manager/settings.json";
+  }
   return invoke<string>("cmd_save_config_file", {
     targetPath: targetPath || null,
     content,
@@ -228,6 +231,9 @@ export async function apiSaveConfigFile(
 }
 
 export async function apiLoadConfigFile(sourcePath?: string): Promise<string> {
+  if (!isTauriRuntime()) {
+    return "";
+  }
   return invoke<string>("cmd_load_config_file", {
     sourcePath: sourcePath || null,
   });

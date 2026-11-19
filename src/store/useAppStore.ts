@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { apiSaveConfigFile } from "../api";
 import type {
   ConflictStrategy,
   DragPayload,
@@ -927,6 +928,7 @@ export const useAppStore = create<AppStoreState>()(
         dualPaneEnabled: state.dualPaneEnabled,
         showHiddenFiles: state.showHiddenFiles,
         showPreviewPanel: state.showPreviewPanel,
+        confirmDelete: state.confirmDelete,
         conflictStrategy: state.conflictStrategy,
         queueRetention: state.queueRetention,
         logFormat: state.logFormat,
@@ -939,3 +941,67 @@ export const useAppStore = create<AppStoreState>()(
     }
   )
 );
+
+// --- 自動儲存設定檔至磁碟 (Auto-save Settings to settings.json) ---
+let isAutoSaveEnabled = false;
+let lastSavedSettingsJson = "";
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function enableConfigAutoSave(): void {
+  isAutoSaveEnabled = true;
+  lastSavedSettingsJson = useAppStore.getState().exportConfigJson();
+}
+
+export function disableConfigAutoSave(): void {
+  isAutoSaveEnabled = false;
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+  }
+}
+
+export function isConfigAutoSaveEnabled(): boolean {
+  return isAutoSaveEnabled;
+}
+
+export async function saveSettingsToFile(targetPath?: string): Promise<string> {
+  const jsonStr = useAppStore.getState().exportConfigJson();
+  const res = await apiSaveConfigFile(jsonStr, targetPath);
+  lastSavedSettingsJson = jsonStr;
+  return res;
+}
+
+export function scheduleAutoSave(delayMs = 600): void {
+  if (!isAutoSaveEnabled) return;
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+  }
+  autoSaveTimer = setTimeout(async () => {
+    autoSaveTimer = null;
+    try {
+      await saveSettingsToFile();
+    } catch (err) {
+      console.error("Auto-saving settings failed:", err);
+    }
+  }, delayMs);
+}
+
+export async function flushAutoSave(): Promise<string | void> {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+  }
+  if (!isAutoSaveEnabled) return;
+  return saveSettingsToFile().catch((err) => {
+    console.error("Flush auto-saving settings failed:", err);
+  });
+}
+
+// 訂閱 Store 狀態變更：只要可持久化的設定 slice 產生變更，自動排程防抖儲存至磁碟
+useAppStore.subscribe((state) => {
+  if (!isAutoSaveEnabled) return;
+  const currentJson = state.exportConfigJson();
+  if (currentJson !== lastSavedSettingsJson) {
+    scheduleAutoSave();
+  }
+});

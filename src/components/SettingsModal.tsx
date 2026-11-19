@@ -28,7 +28,12 @@ import {
   apiSetLogFormat,
   apiSetLogLevel,
 } from "../api";
-import { AVAILABLE_FONTS, useAppStore } from "../store/useAppStore";
+import {
+  AVAILABLE_FONTS,
+  useAppStore,
+  flushAutoSave,
+  saveSettingsToFile,
+} from "../store/useAppStore";
 import { keyboardEventToCombo } from "../utils/formatters";
 import type {
   ConflictStrategy,
@@ -121,21 +126,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!visible) return null;
 
+  const handleClose = () => {
+    flushAutoSave();
+    onClose();
+  };
+
   // 1. 透過 Rust 後端儲存 JSON 設定檔至指定磁碟路徑
   const handleSaveToDisk = async () => {
     try {
-      const jsonStr = exportConfigJson();
-      const savedPath = await apiSaveConfigFile(jsonStr, configPathInput);
+      const savedPath = await saveSettingsToFile(configPathInput);
       setConfigPathInput(savedPath);
       setConfigStatusMsg({
         type: "ok",
-        text: `已成功匯出設定檔至磁碟：${savedPath}`,
+        text: `已成功儲存設定檔至磁碟：${savedPath}`,
       });
-      onNotify?.(`設定檔已匯出至 ${savedPath}`);
+      onNotify?.(`設定檔已儲存至 ${savedPath}`);
     } catch (err) {
       setConfigStatusMsg({
         type: "err",
-        text: `匯出失敗：${String(err)}`,
+        text: `儲存失敗：${String(err)}`,
       });
     }
   };
@@ -209,12 +218,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-slate-950/60">
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-semibold text-white">
-              偏好設定、自訂快速鍵與設定檔匯出/匯入
+              偏好設定、自訂快速鍵與設定檔管理
             </h2>
+            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-medium">
+              <Check size={12} />
+              自動即時存檔至 settings.json
+            </span>
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
           >
             <X size={18} />
@@ -771,11 +784,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span>1. 直接儲存 / 載入本機設定檔路徑 (支援 Portable 隨身碟攜帶)</span>
                 </div>
                 <p className="text-slate-400 leading-relaxed">
-                  可將您的<strong>字型與大小、自訂鍵盤快速鍵、書籤捷徑、已鎖定與設色分頁、雙欄狀態、佇列策略與日誌等級</strong>直接寫入指定的{" "}
-                  <code className="text-emerald-300">.json</code>{" "}
-                  設定檔路徑。預設直接存放在執行檔同目錄下的{" "}
+                  系統已啟用<strong>即時防抖自動儲存</strong>，在各分頁中調整的<strong>字型與大小、自訂鍵盤快速鍵、書籤捷徑、已鎖定與設色分頁、雙欄狀態、佇列策略、刪除確認與日誌等級</strong>皆會即時寫入預設設定檔{" "}
                   <code className="text-amber-300">settings.json</code>{" "}
-                  （與 <code className="text-amber-300">logs/</code> 日誌目錄），完全免安裝、隨身攜帶，初次執行自動產生。
+                  （與 <code className="text-amber-300">logs/</code> 日誌目錄同層，完全免安裝隨身攜帶）。您亦可在此指定任意自訂路徑進行手動存檔、載入或備份。
                 </p>
 
                 <div className="space-y-2 pt-1">
@@ -1112,7 +1123,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="px-5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs text-white font-medium"
           >
             完成並關閉
