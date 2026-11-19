@@ -16,13 +16,16 @@ import {
 } from "lucide-react";
 import {
   apiClearLogs,
+  apiExportConfigWithDialog,
   apiGetDefaultConfigPath,
   apiGetLogFilePath,
   apiGetLogLevel,
+  apiImportConfigWithDialog,
   apiReadLogs,
   apiRevealInShell,
   apiSetLogFormat,
   apiSetLogLevel,
+  isTauriRuntime,
 } from "../api";
 import {
   AVAILABLE_FONTS,
@@ -127,26 +130,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose();
   };
 
-  // 1. 匯出設定檔為獨立 JSON 備份檔
+  // 1. 透過系統「另存新檔」檔案對話框選擇路徑匯出設定檔
   const handleExportConfig = async () => {
     try {
       await saveSettingsToFile();
       const jsonStr = exportConfigJson();
-      const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
       const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-      a.href = url;
-      a.download = `rfm-settings-${dateTag}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const defaultFilename = `rfm-settings-${dateTag}.json`;
+      const savedPath = await apiExportConfigWithDialog(jsonStr, defaultFilename);
+      if (!savedPath) {
+        // 使用者在系統檔案選擇視窗中按下「取消」
+        return;
+      }
       setConfigStatusMsg({
         type: "ok",
-        text: `已成功匯出設定檔備份 (rfm-settings-${dateTag}.json)`,
+        text: `已成功匯出設定檔至：${savedPath}`,
       });
-      onNotify?.(`已匯出設定檔備份 (rfm-settings-${dateTag}.json)`);
+      onNotify?.(`設定檔已成功匯出至：${savedPath}`);
     } catch (err) {
       setConfigStatusMsg({
         type: "err",
@@ -155,8 +155,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  // 2. 從本機挑選任意 .json 設定檔匯入
-  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 2. 透過系統「開啟檔案」檔案對話框挑選任意 .json 設定檔匯入
+  const handleImportConfig = async () => {
+    try {
+      if (isTauriRuntime()) {
+        const res = await apiImportConfigWithDialog();
+        if (!res) {
+          // 使用者在系統檔案選擇視窗中按下「取消」
+          return;
+        }
+        importConfigJson(res.content);
+        await saveSettingsToFile();
+        setConfigStatusMsg({
+          type: "ok",
+          text: `已成功從「${res.path}」匯入所有偏好設定、書籤、分頁與快捷鍵！`,
+        });
+        onNotify?.(`已匯入設定檔：${res.path}`);
+      } else {
+        fileInputRef.current?.click();
+      }
+    } catch (err) {
+      setConfigStatusMsg({
+        type: "err",
+        text: `匯入失敗：${String(err)}`,
+      });
+    }
+  };
+
+  // Web 環境回退之 input file 變更處理器
+  const handleWebFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -809,7 +836,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={handleImportConfig}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium shadow-md transition-colors"
                   >
                     <Upload size={15} />
@@ -820,7 +847,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     ref={fileInputRef}
                     type="file"
                     accept=".json,application/json"
-                    onChange={handleImportConfig}
+                    onChange={handleWebFileInputChange}
                     className="hidden"
                   />
                 </div>

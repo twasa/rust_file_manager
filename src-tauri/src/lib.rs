@@ -517,6 +517,67 @@ fn cmd_load_config_file(
     Ok(raw)
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ImportConfigResult {
+    pub path: String,
+    pub content: String,
+}
+
+#[tauri::command]
+fn cmd_export_config_with_dialog(
+    state: State<'_, AppState>,
+    content: String,
+    default_filename: Option<String>,
+) -> Result<Option<String>, String> {
+    let filename = default_filename.unwrap_or_else(|| {
+        let tag = chrono::Utc::now().format("%Y%m%d").to_string();
+        format!("rfm-settings-{}.json", tag)
+    });
+
+    let mut dialog = rfd::FileDialog::new()
+        .set_title("匯出設定檔備份")
+        .add_filter("JSON 設定檔 (*.json)", &["json"])
+        .set_file_name(&filename);
+
+    if let Some(desktop) = dirs::desktop_dir() {
+        dialog = dialog.set_directory(&desktop);
+    }
+
+    let file_path = match dialog.save_file() {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let target_path_str = normalize_path_str(&file_path);
+    cmd_save_config_file(state, Some(target_path_str), content).map(Some)
+}
+
+#[tauri::command]
+fn cmd_import_config_with_dialog(
+    state: State<'_, AppState>,
+) -> Result<Option<ImportConfigResult>, String> {
+    let mut dialog = rfd::FileDialog::new()
+        .set_title("選擇要匯入的設定檔 (.json)")
+        .add_filter("JSON 設定檔 (*.json)", &["json"]);
+
+    if let Some(desktop) = dirs::desktop_dir() {
+        dialog = dialog.set_directory(&desktop);
+    }
+
+    let file_path = match dialog.pick_file() {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let path_str = normalize_path_str(&file_path);
+    let content = cmd_load_config_file(state, Some(path_str.clone()))?;
+
+    Ok(Some(ImportConfigResult {
+        path: path_str,
+        content,
+    }))
+}
+
 #[tauri::command]
 fn cmd_get_log_file_path(state: State<'_, AppState>) -> String {
     state.logger.get_log_path_str()
@@ -621,6 +682,8 @@ pub fn run() {
             cmd_get_default_config_path,
             cmd_save_config_file,
             cmd_load_config_file,
+            cmd_export_config_with_dialog,
+            cmd_import_config_with_dialog,
             cmd_get_log_file_path,
             cmd_read_logs,
             cmd_clear_logs,
