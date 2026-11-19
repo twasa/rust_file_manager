@@ -9,8 +9,6 @@ import {
   FileJson,
   Download,
   Upload,
-  Save,
-  FolderOpen,
   ExternalLink,
   TerminalSquare,
   RefreshCw,
@@ -21,10 +19,8 @@ import {
   apiGetDefaultConfigPath,
   apiGetLogFilePath,
   apiGetLogLevel,
-  apiLoadConfigFile,
   apiReadLogs,
   apiRevealInShell,
-  apiSaveConfigFile,
   apiSetLogFormat,
   apiSetLogLevel,
 } from "../api";
@@ -131,70 +127,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose();
   };
 
-  // 1. 透過 Rust 後端儲存 JSON 設定檔至指定磁碟路徑
-  const handleSaveToDisk = async () => {
+  // 1. 匯出設定檔為獨立 JSON 備份檔
+  const handleExportConfig = async () => {
     try {
-      const savedPath = await saveSettingsToFile(configPathInput);
-      setConfigPathInput(savedPath);
+      await saveSettingsToFile();
+      const jsonStr = exportConfigJson();
+      const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      a.href = url;
+      a.download = `rfm-settings-${dateTag}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       setConfigStatusMsg({
         type: "ok",
-        text: `已成功儲存設定檔至磁碟：${savedPath}`,
+        text: `已成功匯出設定檔備份 (rfm-settings-${dateTag}.json)`,
       });
-      onNotify?.(`設定檔已儲存至 ${savedPath}`);
+      onNotify?.(`已匯出設定檔備份 (rfm-settings-${dateTag}.json)`);
     } catch (err) {
       setConfigStatusMsg({
         type: "err",
-        text: `儲存失敗：${String(err)}`,
+        text: `匯出失敗：${String(err)}`,
       });
     }
   };
 
-  // 2. 透過 Rust 後端從指定磁碟路徑讀取並匯入 JSON 設定檔
-  const handleLoadFromDisk = async () => {
-    try {
-      const rawJson = await apiLoadConfigFile(configPathInput);
-      importConfigJson(rawJson);
-      setConfigStatusMsg({
-        type: "ok",
-        text: `已成功從磁碟載入並套用設定檔：${configPathInput}`,
-      });
-      onNotify?.("已成功匯入並套用設定檔！");
-    } catch (err) {
-      setConfigStatusMsg({
-        type: "err",
-        text: `匯入失敗：${String(err)}`,
-      });
-    }
-  };
-
-  // 3. 瀏覽器/檔案選擇器直接下載 .json 備份檔
-  const handleDownloadJsonFile = () => {
-    const jsonStr = exportConfigJson();
-    const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    a.href = url;
-    a.download = `rfm-settings-${dateTag}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setConfigStatusMsg({
-      type: "ok",
-      text: `已觸發下載設定檔備份 (rfm-settings-${dateTag}.json)`,
-    });
-  };
-
-  // 4. 從本機檔案選擇器挑選任意 .json 匯入
-  const handleUploadJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 2. 從本機挑選任意 .json 設定檔匯入
+  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
         const content = String(ev.target?.result || "");
         importConfigJson(content);
+        await saveSettingsToFile();
         setConfigStatusMsg({
           type: "ok",
           text: `已成功從「${file.name}」匯入所有偏好設定、書籤、分頁與快捷鍵！`,
@@ -218,7 +188,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-slate-950/60">
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-semibold text-white">
-              偏好設定、自訂快速鍵與設定檔管理
+              偏好設定
             </h2>
             <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-medium">
               <Check size={12} />
@@ -282,7 +252,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }`}
           >
             <FileJson size={15} />
-            <span>設定檔匯出 / 匯入 (.json)</span>
+            <span>設定檔匯出/匯入</span>
           </button>
           <button
             type="button"
@@ -764,123 +734,96 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {activeTab === "config" && (
-            <div className="space-y-5">
+            <div className="space-y-4">
               {configStatusMsg && (
                 <div
-                  className={`p-3 rounded-lg border text-xs ${
+                  className={`p-3 rounded-lg border text-xs flex items-center justify-between ${
                     configStatusMsg.type === "ok"
                       ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
                       : "bg-rose-500/15 border-rose-500/40 text-rose-300"
                   }`}
                 >
-                  {configStatusMsg.text}
+                  <span>{configStatusMsg.text}</span>
+                  <button
+                    type="button"
+                    onClick={() => setConfigStatusMsg(null)}
+                    className="text-slate-400 hover:text-white ml-2 p-0.5 rounded"
+                  >
+                    <X size={13} />
+                  </button>
                 </div>
               )}
 
-              {/* 方式一：磁碟固定路徑讀寫 (支援跨平台設定目錄或 Portable 模式) */}
-              <div className="p-4 rounded-lg bg-slate-950/70 border border-slate-800 space-y-3">
-                <div className="font-semibold text-slate-200 flex items-center gap-2">
-                  <Save size={15} className="text-emerald-400" />
-                  <span>1. 直接儲存 / 載入本機設定檔路徑 (支援 Portable 隨身碟攜帶)</span>
+              {/* 設定檔路徑 */}
+              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold text-slate-200 text-xs flex items-center gap-2">
+                    <FileJson size={16} className="text-amber-400" />
+                    <span>設定檔完整路徑 (Portable 隨身攜帶)</span>
+                  </div>
                 </div>
-                <p className="text-slate-400 leading-relaxed">
-                  系統已啟用<strong>即時防抖自動儲存</strong>，在各分頁中調整的<strong>字型與大小、自訂鍵盤快速鍵、書籤捷徑、已鎖定與設色分頁、雙欄狀態、佇列策略、刪除確認與日誌等級</strong>皆會即時寫入預設設定檔{" "}
-                  <code className="text-amber-300">settings.json</code>{" "}
-                  （與 <code className="text-amber-300">logs/</code> 日誌目錄同層，完全免安裝隨身攜帶）。您亦可在此指定任意自訂路徑進行手動存檔、載入或備份。
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={configPathInput}
+                    className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono text-xs select-all focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (configPathInput) apiRevealInShell(configPathInput).catch(() => {});
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition-colors shrink-0"
+                    title="在系統檔案總管中開啟此設定檔所在位置"
+                  >
+                    <ExternalLink size={14} className="text-cyan-400" />
+                    <span>在檔案總管開啟</span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  系統已啟用<strong>即時防抖自動儲存</strong>，在各分頁中進行的任何設定異動皆會自動同步寫入此檔案，啟動時亦會自動載入。
                 </p>
-
-                <div className="space-y-2 pt-1">
-                  <label className="block text-[11px] text-slate-400">
-                    目標設定檔完整路徑：
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={configPathInput}
-                      onChange={(e) => setConfigPathInput(e.target.value)}
-                      placeholder="例如: D:/devops_workspace/private/rust_file_manager/rfm-settings.json"
-                      className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono text-xs focus:border-blue-500 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (configPathInput) apiRevealInShell(configPathInput).catch(() => {});
-                      }}
-                      className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
-                      title="在系統檔案總管中顯示此設定檔"
-                    >
-                      <ExternalLink size={14} />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 pt-2">
-                    <button
-                      type="button"
-                      onClick={handleSaveToDisk}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
-                    >
-                      <Save size={14} />
-                      <span>匯出寫入此路徑</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleLoadFromDisk}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium"
-                    >
-                      <FolderOpen size={14} />
-                      <span>從此路徑讀取匯入</span>
-                    </button>
-                  </div>
-                </div>
               </div>
 
-              {/* 方式二：透過檔案選擇器任意匯出下載 / 挑選檔案匯入 */}
-              <div className="p-4 rounded-lg bg-slate-950/70 border border-slate-800 space-y-3">
-                <div className="font-semibold text-slate-200 flex items-center gap-2">
-                  <FileJson size={15} className="text-blue-400" />
-                  <span>2. 透過檔案對話框匯出備份或選擇任意設定檔匯入</span>
+              {/* 匯出與匯入兩大按鈕 */}
+              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
+                <div className="font-semibold text-slate-200 text-xs">
+                  設定檔備份與遷移
                 </div>
-                <p className="text-slate-400">
-                  方便您將設定檔備份分享至其他電腦（Windows / Linux / macOS 格式完全相容）。
+                <p className="text-[11px] text-slate-400">
+                  您可將目前的所有偏好設定、快速鍵與書籤匯出為獨立 JSON 備份檔，或從備份檔還原。
                 </p>
 
                 <div className="flex items-center gap-3 pt-1">
                   <button
                     type="button"
-                    onClick={handleDownloadJsonFile}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium"
+                    onClick={handleExportConfig}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium shadow-md transition-colors"
                   >
-                    <Download size={14} className="text-emerald-400" />
-                    <span>下載設定檔備份 (.json)</span>
+                    <Download size={15} />
+                    <span>匯出設定檔</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium shadow-md transition-colors"
+                  >
+                    <Upload size={15} />
+                    <span>匯入設定檔</span>
                   </button>
 
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept=".json,application/json"
-                    onChange={handleUploadJsonFile}
+                    onChange={handleImportConfig}
                     className="hidden"
                   />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium"
-                  >
-                    <Upload size={14} className="text-blue-400" />
-                    <span>瀏覽並選擇 .json 設定檔匯入...</span>
-                  </button>
                 </div>
-              </div>
-
-              {/* 目前設定檔 JSON 內容即時預覽 */}
-              <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800">
-                <div className="text-[11px] text-slate-400 mb-2 flex justify-between">
-                  <span>目前設定檔 JSON 結構預覽：</span>
-                  <span className="font-mono text-slate-500">schemaVersion: 1</span>
-                </div>
-                <pre className="max-h-44 overflow-y-auto text-[11px] font-mono text-slate-300 whitespace-pre-wrap select-text">
-                  {exportConfigJson()}
-                </pre>
               </div>
             </div>
           )}

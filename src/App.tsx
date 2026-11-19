@@ -990,10 +990,10 @@ export const App: React.FC = () => {
               setSettingsModalOpen(true);
             }}
             className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium"
-            title="開啟字體設定與自訂鍵盤快速鍵"
+            title="開啟偏好設定"
           >
             <Settings size={13} />
-            <span>設定與快捷鍵</span>
+            <span>設定</span>
           </button>
         </div>
       </header>
