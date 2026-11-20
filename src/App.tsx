@@ -44,6 +44,7 @@ import {
   saveSettingsToFile,
 } from "./store/useAppStore";
 import { keyboardEventToCombo } from "./utils/formatters";
+import { isBrowserHotkeySuppressed } from "./utils/browserEvents";
 import { Sidebar } from "./components/Sidebar";
 import { FilePane } from "./components/FilePane";
 import { PreviewPanel } from "./components/PreviewPanel";
@@ -548,6 +549,11 @@ export const App: React.FC = () => {
   // 全域自訂快捷鍵攔截器
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 攔截瀏覽器原生非預期熱鍵（如 Ctrl+R / Cmd+R 重新整理網頁、Ctrl+P / Cmd+P 列印、Ctrl+S / Cmd+S 另存網頁）
+      if (isBrowserHotkeySuppressed(e)) {
+        e.preventDefault();
+      }
+
       const target = e.target as HTMLElement | null;
       if (
         target &&
