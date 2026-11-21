@@ -77,4 +77,26 @@ describe("typeAhead utility", () => {
     expect(isTypeAheadKey({ key: "v", metaKey: true })).toBe(false);
     expect(isTypeAheadKey({ key: "a", altKey: true })).toBe(false);
   });
+
+  it("handles buffer accumulation and manual reset", () => {
+    let buffer = "";
+    const appendKey = (char: string) => {
+      buffer += char;
+    };
+    const clearBuffer = () => {
+      buffer = "";
+    };
+
+    appendKey("d");
+    expect(buffer).toBe("d");
+    expect(findTypeAheadMatchIndex(entries, buffer, -1, false)).toBe(3); // document.pdf
+
+    appendKey("o");
+    expect(buffer).toBe("do");
+    expect(findTypeAheadMatchIndex(entries, buffer, -1, false)).toBe(3); // document.pdf
+
+    clearBuffer();
+    expect(buffer).toBe("");
+    expect(findTypeAheadMatchIndex(entries, buffer, -1, false)).toBe(-1);
+  });
 });
