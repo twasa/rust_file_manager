@@ -126,10 +126,18 @@ export const FilePane: React.FC<FilePaneProps> = ({
   const inlineInputRef = useRef<HTMLInputElement>(null);
 
   // 打字跳轉 (Type-to-Select) 狀態
-  const [typeAheadQuery, setTypeAheadQuery] = useState("");
-  const [typeAheadBadgeVisible, setTypeAheadBadgeVisible] = useState(false);
+  const typeAheadBufferRef = useRef("");
+  const [typeAheadBadge, setTypeAheadBadge] = useState<string | null>(null);
   const typeAheadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const typeAheadBadgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTypeAhead = useCallback(() => {
+    typeAheadBufferRef.current = "";
+    setTypeAheadBadge(null);
+    if (typeAheadTimerRef.current) {
+      clearTimeout(typeAheadTimerRef.current);
+      typeAheadTimerRef.current = null;
+    }
+  }, []);
 
   // 滑鼠框選 (Marquee Selection) 狀態
   const [marqueeBox, setMarqueeBox] = useState<MarqueeBox | null>(null);
@@ -350,6 +358,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
   const handleRowClick = (e: React.MouseEvent, entry: FileEntry, index: number) => {
     e.stopPropagation();
     setActivePane(pane);
+    clearTypeAhead();
 
     // Ctrl + 左鍵點擊目錄：直接在新分頁開啟該目錄
     if ((e.ctrlKey || e.metaKey) && e.altKey && entry.isDir) {
@@ -477,6 +486,20 @@ export const FilePane: React.FC<FilePaneProps> = ({
     }
   };
 
+  // 切換分頁或更換目錄時清空打字跳轉狀態
+  useEffect(() => {
+    clearTypeAhead();
+  }, [activeTab?.path, clearTypeAhead]);
+
+  // 元件卸載時清理計時器
+  useEffect(() => {
+    return () => {
+      if (typeAheadTimerRef.current) {
+        clearTimeout(typeAheadTimerRef.current);
+      }
+    };
+  }, []);
+
   // 監聽鍵盤事件以執行打字跳轉 (Type-to-Select)
   useEffect(() => {
     const handleWindowKeyDown = (e: KeyboardEvent) => {
@@ -496,11 +519,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
       }
 
       if (e.key === "Escape") {
-        setTypeAheadQuery("");
-        setTypeAheadBadgeVisible(false);
-        if (typeAheadTimerRef.current) clearTimeout(typeAheadTimerRef.current);
-        if (typeAheadBadgeTimerRef.current)
-          clearTimeout(typeAheadBadgeTimerRef.current);
+        clearTypeAhead();
         return;
       }
 
@@ -511,28 +530,26 @@ export const FilePane: React.FC<FilePaneProps> = ({
       let isSingleRepeat = false;
 
       if (
-        typeAheadQuery.length === 1 &&
-        typeAheadQuery.toLowerCase() === char.toLowerCase()
+        typeAheadBufferRef.current.length === 1 &&
+        typeAheadBufferRef.current.toLowerCase() === char.toLowerCase()
       ) {
         isSingleRepeat = true;
-        nextQuery = typeAheadQuery;
+        nextQuery = typeAheadBufferRef.current;
       } else {
-        nextQuery = typeAheadQuery + char;
+        nextQuery = typeAheadBufferRef.current + char;
       }
 
-      setTypeAheadQuery(nextQuery);
-      setTypeAheadBadgeVisible(true);
+      typeAheadBufferRef.current = nextQuery;
+      setTypeAheadBadge(nextQuery);
 
-      if (typeAheadTimerRef.current) clearTimeout(typeAheadTimerRef.current);
+      if (typeAheadTimerRef.current) {
+        clearTimeout(typeAheadTimerRef.current);
+      }
       typeAheadTimerRef.current = setTimeout(() => {
-        setTypeAheadQuery("");
-      }, 800);
-
-      if (typeAheadBadgeTimerRef.current)
-        clearTimeout(typeAheadBadgeTimerRef.current);
-      typeAheadBadgeTimerRef.current = setTimeout(() => {
-        setTypeAheadBadgeVisible(false);
-      }, 1500);
+        typeAheadBufferRef.current = "";
+        setTypeAheadBadge(null);
+        typeAheadTimerRef.current = null;
+      }, 1000);
 
       const currentSelectedPath =
         activeTab?.lastSelectedPath || activeTab?.selectedPaths[0];
@@ -572,20 +589,17 @@ export const FilePane: React.FC<FilePaneProps> = ({
     window.addEventListener("keydown", handleWindowKeyDown);
     return () => {
       window.removeEventListener("keydown", handleWindowKeyDown);
-      if (typeAheadTimerRef.current) clearTimeout(typeAheadTimerRef.current);
-      if (typeAheadBadgeTimerRef.current)
-        clearTimeout(typeAheadBadgeTimerRef.current);
     };
   }, [
     activePane,
     pane,
     creatingMode,
     inlineRenameTargetPath,
-    typeAheadQuery,
     processedEntries,
     activeTab,
     setTabSelection,
     rowVirtualizer,
+    clearTypeAhead,
   ]);
 
   // 處理滑鼠在容器內空白處按住拖曳框選 (Marquee Selection)
@@ -1022,6 +1036,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
         ref={parentRef}
         onMouseDown={handleContainerMouseDown}
         onClick={() => {
+          clearTypeAhead();
           if (justFinishedMarqueeRef.current) {
             justFinishedMarqueeRef.current = false;
             return;
@@ -1297,11 +1312,28 @@ export const FilePane: React.FC<FilePaneProps> = ({
           />
         )}
 
-        {/* 打字跳轉浮動提示標籤 */}
-        {typeAheadBadgeVisible && typeAheadQuery && (
-          <div className="absolute bottom-3 right-3 z-30 px-2.5 py-1 rounded-md bg-slate-900/95 border border-blue-500/70 shadow-lg text-xs text-blue-300 font-mono flex items-center gap-1.5 backdrop-blur-sm pointer-events-none transition-all">
-            <span className="text-[10px] text-slate-400">跳至:</span>
-            <span className="font-semibold text-white tracking-wide">{typeAheadQuery}</span>
+        {/* 打字跳轉浮動提示標籤 (1 秒自動清除，亦支援點擊關閉或按 Esc 清除) */}
+        {typeAheadBadge && (
+          <div
+            onClick={clearTypeAhead}
+            className="absolute bottom-3 right-3 z-30 px-3 py-1.5 rounded-lg bg-slate-900/95 border border-blue-500/70 shadow-xl text-xs text-blue-300 font-mono flex items-center gap-2 backdrop-blur-md cursor-pointer transition-all animate-in fade-in duration-150 select-none hover:border-blue-400 group"
+            title="點擊或按 Esc 關閉"
+          >
+            <span className="text-[11px] text-slate-400">跳至:</span>
+            <span className="font-semibold text-white tracking-wide text-sm">
+              {typeAheadBadge}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                clearTypeAhead();
+              }}
+              className="ml-1 p-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              title="清除 (Esc)"
+            >
+              <X size={12} />
+            </button>
           </div>
         )}
       </div>
