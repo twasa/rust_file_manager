@@ -32,6 +32,14 @@ import {
 } from "../api";
 import { useAppStore } from "../store/useAppStore";
 import { formatBytes, formatDateTime, keyboardEventToCombo } from "../utils/formatters";
+import { findTypeAheadMatchIndex, isTypeAheadKey } from "../utils/typeAhead";
+import {
+  calculateMarqueeBox,
+  getDetailsIntersectedIndices,
+  computeMarqueeSelection,
+  MarqueeBox,
+  MarqueeModifierMode,
+} from "../utils/marquee";
 import { FileEntryIcon } from "./FileEntryIcon";
 import { TabBar } from "./TabBar";
 import type {
@@ -116,6 +124,23 @@ export const FilePane: React.FC<FilePaneProps> = ({
 
   const parentRef = useRef<HTMLDivElement>(null);
   const inlineInputRef = useRef<HTMLInputElement>(null);
+
+  // 打字跳轉 (Type-to-Select) 狀態
+  const [typeAheadQuery, setTypeAheadQuery] = useState("");
+  const [typeAheadBadgeVisible, setTypeAheadBadgeVisible] = useState(false);
+  const typeAheadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typeAheadBadgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 滑鼠框選 (Marquee Selection) 狀態
+  const [marqueeBox, setMarqueeBox] = useState<MarqueeBox | null>(null);
+  const justFinishedMarqueeRef = useRef(false);
+  const marqueeStateRef = useRef<{
+    isDragging: boolean;
+    startX: number;
+    startY: number;
+    initialSelectedPaths: string[];
+    mode: MarqueeModifierMode;
+  } | null>(null);
 
   const loadDirectory = useCallback(
     async (targetPath: string, force = false) => {
@@ -452,6 +477,262 @@ export const FilePane: React.FC<FilePaneProps> = ({
     }
   };
 
+  // 監聽鍵盤事件以執行打字跳轉 (Type-to-Select)
+  useEffect(() => {
+    const handleWindowKeyDown = (e: KeyboardEvent) => {
+      if (activePane !== pane) return;
+      if (creatingMode || inlineRenameTargetPath) return;
+      if (e.defaultPrevented) return;
+
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key === "Escape") {
+        setTypeAheadQuery("");
+        setTypeAheadBadgeVisible(false);
+        if (typeAheadTimerRef.current) clearTimeout(typeAheadTimerRef.current);
+        if (typeAheadBadgeTimerRef.current)
+          clearTimeout(typeAheadBadgeTimerRef.current);
+        return;
+      }
+
+      if (!isTypeAheadKey(e)) return;
+
+      const char = e.key;
+      let nextQuery = "";
+      let isSingleRepeat = false;
+
+      if (
+        typeAheadQuery.length === 1 &&
+        typeAheadQuery.toLowerCase() === char.toLowerCase()
+      ) {
+        isSingleRepeat = true;
+        nextQuery = typeAheadQuery;
+      } else {
+        nextQuery = typeAheadQuery + char;
+      }
+
+      setTypeAheadQuery(nextQuery);
+      setTypeAheadBadgeVisible(true);
+
+      if (typeAheadTimerRef.current) clearTimeout(typeAheadTimerRef.current);
+      typeAheadTimerRef.current = setTimeout(() => {
+        setTypeAheadQuery("");
+      }, 800);
+
+      if (typeAheadBadgeTimerRef.current)
+        clearTimeout(typeAheadBadgeTimerRef.current);
+      typeAheadBadgeTimerRef.current = setTimeout(() => {
+        setTypeAheadBadgeVisible(false);
+      }, 1500);
+
+      const currentSelectedPath =
+        activeTab?.lastSelectedPath || activeTab?.selectedPaths[0];
+      const currentIdx = currentSelectedPath
+        ? processedEntries.findIndex((item) => item.path === currentSelectedPath)
+        : -1;
+
+      const matchIdx = findTypeAheadMatchIndex(
+        processedEntries,
+        nextQuery,
+        currentIdx,
+        isSingleRepeat
+      );
+
+      if (matchIdx !== -1) {
+        const matched = processedEntries[matchIdx];
+        setTabSelection(pane, [matched.path], matched.path);
+        if (activeTab?.viewMode !== "grid") {
+          rowVirtualizer.scrollToIndex(matchIdx, { align: "auto" });
+        } else {
+          const gridItems =
+            parentRef.current?.querySelectorAll<HTMLElement>(
+              "[data-grid-item-path]"
+            );
+          if (gridItems) {
+            for (const item of gridItems) {
+              if (item.getAttribute("data-grid-item-path") === matched.path) {
+                item.scrollIntoView({ block: "nearest", inline: "nearest" });
+                break;
+              }
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+      if (typeAheadTimerRef.current) clearTimeout(typeAheadTimerRef.current);
+      if (typeAheadBadgeTimerRef.current)
+        clearTimeout(typeAheadBadgeTimerRef.current);
+    };
+  }, [
+    activePane,
+    pane,
+    creatingMode,
+    inlineRenameTargetPath,
+    typeAheadQuery,
+    processedEntries,
+    activeTab,
+    setTabSelection,
+    rowVirtualizer,
+  ]);
+
+  // 處理滑鼠在容器內空白處按住拖曳框選 (Marquee Selection)
+  const handleContainerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    if (creatingMode || inlineRenameTargetPath) return;
+
+    const target = e.target as HTMLElement;
+    if (target.closest("button, input, select, textarea, [role='button']")) {
+      return;
+    }
+
+    const fileBodyEl = target.closest("[data-file-body='true']");
+    const gridCardEl = target.closest("[data-file-grid-card='true']");
+
+    if (fileBodyEl || gridCardEl) {
+      return;
+    }
+
+    const rowEl = target.closest("[data-file-row='true']");
+    if (rowEl) {
+      const rowPath = rowEl.getAttribute("data-file-row-path");
+      if (rowPath && selectedSet.has(rowPath)) {
+        return;
+      }
+    }
+
+    if (!parentRef.current) return;
+    const rect = parentRef.current.getBoundingClientRect();
+    const startX = e.clientX - rect.left + parentRef.current.scrollLeft;
+    const startY = e.clientY - rect.top + parentRef.current.scrollTop;
+
+    const mode: MarqueeModifierMode =
+      e.ctrlKey || e.metaKey
+        ? "toggle"
+        : e.shiftKey
+        ? "union"
+        : "replace";
+
+    marqueeStateRef.current = {
+      isDragging: false,
+      startX,
+      startY,
+      initialSelectedPaths: activeTab?.selectedPaths || [],
+      mode,
+    };
+
+    const handleWindowMouseMove = (moveEvent: MouseEvent) => {
+      if (!marqueeStateRef.current || !parentRef.current) return;
+
+      const pRect = parentRef.current.getBoundingClientRect();
+      const curX =
+        moveEvent.clientX - pRect.left + parentRef.current.scrollLeft;
+      const curY =
+        moveEvent.clientY - pRect.top + parentRef.current.scrollTop;
+
+      const dist = Math.hypot(
+        curX - marqueeStateRef.current.startX,
+        curY - marqueeStateRef.current.startY
+      );
+      if (!marqueeStateRef.current.isDragging && dist < 4) {
+        return;
+      }
+      marqueeStateRef.current.isDragging = true;
+
+      // 邊界自動平滑捲動 (30px 邊界門檻)
+      const mouseY = moveEvent.clientY - pRect.top;
+      if (mouseY < 30) {
+        const speed = Math.max(2, Math.floor((30 - mouseY) / 2));
+        parentRef.current.scrollTop -= speed;
+      } else if (pRect.bottom - moveEvent.clientY < 30) {
+        const speed = Math.max(
+          2,
+          Math.floor((30 - (pRect.bottom - moveEvent.clientY)) / 2)
+        );
+        parentRef.current.scrollTop += speed;
+      }
+
+      const box = calculateMarqueeBox(
+        marqueeStateRef.current.startX,
+        marqueeStateRef.current.startY,
+        curX,
+        curY
+      );
+      setMarqueeBox(box);
+
+      let intersectedPaths: string[] = [];
+      if (activeTab?.viewMode !== "grid") {
+        const rowHeight = fontSettings.rowHeightPx;
+        const indices = getDetailsIntersectedIndices(
+          box,
+          rowHeight,
+          processedEntries.length
+        );
+        intersectedPaths = indices.map((idx) => processedEntries[idx].path);
+      } else {
+        const gridItems = parentRef.current.querySelectorAll<HTMLElement>(
+          "[data-grid-item-path]"
+        );
+        const boxScreenLeft =
+          box.left - parentRef.current.scrollLeft + pRect.left;
+        const boxScreenTop =
+          box.top - parentRef.current.scrollTop + pRect.top;
+        const boxScreenRight = boxScreenLeft + box.width;
+        const boxScreenBottom = boxScreenTop + box.height;
+
+        gridItems.forEach((el) => {
+          const itemRect = el.getBoundingClientRect();
+          if (
+            itemRect.left < boxScreenRight &&
+            itemRect.right > boxScreenLeft &&
+            itemRect.top < boxScreenBottom &&
+            itemRect.bottom > boxScreenTop
+          ) {
+            const path = el.getAttribute("data-grid-item-path");
+            if (path) intersectedPaths.push(path);
+          }
+        });
+      }
+
+      const newSelected = computeMarqueeSelection(
+        marqueeStateRef.current.initialSelectedPaths,
+        intersectedPaths,
+        marqueeStateRef.current.mode
+      );
+      setTabSelection(
+        pane,
+        newSelected,
+        newSelected[newSelected.length - 1] || null
+      );
+    };
+
+    const handleWindowMouseUp = () => {
+      window.removeEventListener("mousemove", handleWindowMouseMove);
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+
+      if (marqueeStateRef.current?.isDragging) {
+        justFinishedMarqueeRef.current = true;
+      }
+      marqueeStateRef.current = null;
+      setMarqueeBox(null);
+    };
+
+    window.addEventListener("mousemove", handleWindowMouseMove);
+    window.addEventListener("mouseup", handleWindowMouseUp);
+  };
+
   // 拆解麵包屑導覽路徑
   const breadcrumbs = useMemo(() => {
     const p = activeTab?.path || "";
@@ -739,7 +1020,14 @@ export const FilePane: React.FC<FilePaneProps> = ({
       {/* 檔案列表主視窗 (Virtual Scrolling + Drag & Drop + Context Menu) */}
       <div
         ref={parentRef}
-        onClick={() => setTabSelection(pane, [], null)}
+        onMouseDown={handleContainerMouseDown}
+        onClick={() => {
+          if (justFinishedMarqueeRef.current) {
+            justFinishedMarqueeRef.current = false;
+            return;
+          }
+          setTabSelection(pane, [], null);
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
           setActivePane(pane);
@@ -782,6 +1070,8 @@ export const FilePane: React.FC<FilePaneProps> = ({
               return (
                 <div
                   key={entry.path}
+                  data-file-grid-card="true"
+                  data-grid-item-path={entry.path}
                   draggable={!isRenaming}
                   onDragStart={(e) => {
                     e.stopPropagation();
@@ -880,6 +1170,8 @@ export const FilePane: React.FC<FilePaneProps> = ({
               return (
                 <div
                   key={entry.path}
+                  data-file-row="true"
+                  data-file-row-path={entry.path}
                   draggable={!isRenaming}
                   onDragStart={(e) => {
                     e.stopPropagation();
@@ -947,7 +1239,10 @@ export const FilePane: React.FC<FilePaneProps> = ({
                   } ${entry.isHidden ? "opacity-60" : ""}`}
                 >
                   {/* 名稱與圖示 */}
-                  <div className="col-span-6 flex items-center gap-2.5 min-w-0 pr-2">
+                  <div
+                    data-file-body="true"
+                    className="col-span-6 flex items-center gap-2.5 min-w-0 pr-2"
+                  >
                     <FileEntryIcon
                       kind={entry.kind}
                       size={Math.max(16, fontSettings.fontSizePx + 3)}
@@ -985,6 +1280,28 @@ export const FilePane: React.FC<FilePaneProps> = ({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* 滑鼠框選矩形 */}
+        {marqueeBox && (
+          <div
+            style={{
+              position: "absolute",
+              left: `${marqueeBox.left}px`,
+              top: `${marqueeBox.top}px`,
+              width: `${marqueeBox.width}px`,
+              height: `${marqueeBox.height}px`,
+            }}
+            className="border border-blue-400 bg-blue-500/20 rounded-sm pointer-events-none z-30"
+          />
+        )}
+
+        {/* 打字跳轉浮動提示標籤 */}
+        {typeAheadBadgeVisible && typeAheadQuery && (
+          <div className="absolute bottom-3 right-3 z-30 px-2.5 py-1 rounded-md bg-slate-900/95 border border-blue-500/70 shadow-lg text-xs text-blue-300 font-mono flex items-center gap-1.5 backdrop-blur-sm pointer-events-none transition-all">
+            <span className="text-[10px] text-slate-400">跳至:</span>
+            <span className="font-semibold text-white tracking-wide">{typeAheadQuery}</span>
           </div>
         )}
       </div>

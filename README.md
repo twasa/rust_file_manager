@@ -64,7 +64,22 @@
 | **返回上一層目錄** | `Backspace` | 導覽至父目錄 |
 | **在目前目錄開啟終端機** | `` Ctrl+` `` | 啟動 PowerShell 7 / Windows Terminal / macOS & Linux Terminal |
 
-### 7. 拖拉功能 (Drag & Drop)
+### 7. 高效操作性：打字自動跳轉 (Type-to-Select) 與滑鼠框選多檔案 (Marquee Selection) (`src/components/FilePane.tsx`)
+- **打字自動跳轉檔案 (Type-to-Select / Quick Jump)**：
+  - **前綴即時匹配**：在檔案列表任意處直接鍵入字母（例如連續輸入 `doc` 或 `proj`），焦點與選取游標即時跳轉至開頭相符的檔案，並自動捲動至可視範圍中央。
+  - **單字母重複循環跳轉**：連續重複按下同一個字母（例如連續按 `p`、`p`、`p`），將在所有以該字母開頭的項目間依序循環切換。
+  - **800ms 智慧緩衝與浮動提示**：按鍵輸入具備 800ms 緩衝逾時自動重設，並於面板右下角顯示極簡半透明徽章（如 `跳至: doc`），停止輸入後自動淡出。
+  - **輸入框防衝突隔離**：當聚焦於搜尋框、路徑列、重新命名輸入框或對話框時自動停用，嚴防誤觸。
+- **滑鼠框選 / 圈選多檔案 (Marquee / Rubber-band Selection)**：
+  - **空白處直接起拖**：於檔案列表空白處、列與列間隔或清單底端按住滑鼠左鍵拖曳即可拉出藍色半透明選取矩形；點擊檔案圖示或檔名本體拖曳則維持為檔案搬移/複製 (DND)。
+  - **原生標準組合鍵行為**：
+    - **一般拖曳**：取代選取，僅選取與框選矩形相交的檔案。
+    - **按住 `Ctrl` / `Cmd` 拖曳**：對框選到的項目進行反轉/追加選取（Toggle）。
+    - **按住 `Shift` 拖曳**：聯集追加選取（保留既有選取項目並擴充）。
+  - **O(1) 高效幾何相交計算**：結合 `@tanstack/react-virtual` 虛擬滾動的高度區間與幾何座標比對，無論數百或數萬個檔案皆極速判定。
+  - **邊界自動平滑捲動**：當框選游標拖曳接近面板頂部或底部邊界（$\le 30\text{px}$）時，清單自動平滑向上/向下捲動，支援跨畫面大範圍框選。
+
+### 8. 拖拉功能 (Drag & Drop)
 - 支援將單一或多個選取項目直接拖拉至：
   1. 同一列表中的**子資料夾**
   2. 雙欄並排模式下的**另一側面板**
@@ -72,18 +87,18 @@
   4. 左側邊欄的**書籤捷徑**或**磁碟掛載點**
 - 拖拉放開時若按住 `Ctrl` 鍵會自動轉為「複製佇列」，未按則預設為「搬移佇列」。
 
-### 8. 進階批次檔案重新命名工具 (`src-tauri/src/batch_rename.rs`)
+### 9. 進階批次檔案重新命名工具 (`src-tauri/src/batch_rename.rs`)
 - **尋找與取代**：支援一般字串與正規表示式（Regex 擷取群組 `$1`, `$2`）及大小寫區分設定。
 - **動態變數支援**：支援在取代欄、前綴或後綴插入 `{date}`（當日 `YYYYMMDD`）、`{name}`（原主檔名）、`{ext}`（原副檔名）。
 - **大小寫與副檔名轉換**：一鍵轉全小寫 (`lowercase`)、全大寫 (`UPPERCASE`)、首字大寫 (`Title Case`) 或統一覆寫副檔名。
 - **自動流水號編碼**：可自訂起始數字、遞增步長、補零位數（如 `001`, `002`）與插入位置（開頭、末端或完全取代主檔名）。
 - **即時預覽、衝突檢查與兩階段原子更名 + 一鍵復原 (Undo)**：執行前即時標示同名衝突；執行時採用兩階段暫存更名避免連號檔案互撞，並在完成後於頂部工具列提供「復原批次改名」按鈕。
 
-### 9. 完整儲存裝置支援與磁碟代號排序 (`src-tauri/src/fs_ops.rs` & `src/components/Sidebar.tsx`)
+### 10. 完整儲存裝置支援與磁碟代號排序 (`src-tauri/src/fs_ops.rs` & `src/components/Sidebar.tsx`)
 - **支援 RAMDisk / ImDisk / Google Drive 雲端硬碟 / 網路磁碟機**：除了標準實體磁碟外，Windows 後端結合 Win32 API (`GetLogicalDrives`、`GetVolumeInformationW`、`GetDiskFreeSpaceExW`) 自動補齊所有邏輯掛載磁碟（如 ImDisk RAMDisk `R:`、Google 雲端硬碟 `G:` 與網路磁碟）。
 - **依磁碟代號字母嚴格排序**：側邊欄儲存空間統一採用 `代號: (磁碟標籤)` 格式（如 `C: (本機磁碟)`、`D: (D)`、`G: (Google Drive)`、`R: (RamDisk)`），並依磁碟字母由小到大整齊排列。
 
-### 10. 資訊安全防護設計 (Security Architecture)
+### 11. 資訊安全防護設計 (Security Architecture)
 - **嚴格內容安全政策 (Strict CSP)**：於 `src-tauri/tauri.conf.json` 啟用 `default-src 'self'; script-src 'self'` 等白名單限制，防止 WebView 載入或執行任何外部未知腳本。
 - **壓縮檔解壓縮 Zip Slip 路徑穿越防護 (`src-tauri/src/system_ops.rs`)**：解壓縮前先透過 `validate_archive_entries_list` 預檢壓縮檔內部清單，一旦發現包含 `../`、`..\`、絕對路徑（`/`、`C:\`）即自動攔截並拒絕解壓縮。
 - **檔名安全驗證與保留設備名攔截 (`validate_safe_entry_name`)**：於建立檔案/目錄、原地改名與批次重新命名中，統一攔截路徑跳脫字元（`..`、`/`、`\`、`:`、`\0`）與系統保留設備名（`CON`、`PRN`、`AUX`、`NUL`、`COM1~9`、`LPT1~9`）。
@@ -91,7 +106,7 @@
 - **子行程陣列傳參防範命令注入 (Command Injection Prevention)**：所有外部行程呼叫（`wt`、`pwsh`、`explorer`、`tar`）一律透過 `Command::new().args([...])` 陣列傳遞，不經過 Shell 字串拼接。
 - **設定檔讀寫副檔名與容量保護 (`src-tauri/src/lib.rs`)**：強制限制設定檔讀寫路徑必須為 `.json` 副檔名且不超過 `5 MB`，並於預覽面板限制最多讀取前 `32 KB`，防止任意系統檔案覆寫或大檔記憶體耗盡 (OOM)。
 
-### 11. 結構化 JSON 日誌與設定檔損毀診斷 (`src-tauri/src/logger.rs`)
+### 12. 結構化 JSON 日誌與設定檔損毀診斷 (`src-tauri/src/logger.rs`)
 - **同層日誌目錄與 JSON Lines (`.jsonl`) 現代化格式**：日誌目錄 `logs/` 預設直接建立於執行檔同層，以單行 JSON (`timestamp`, `level`, `target`, `event`, `message`, `context`, `pid`, `os`) 寫入 `logs/rfm.jsonl`（單檔上限 5 MB 自動輪替 Rotation），方便直接對接 `jq`、Grafana Loki、ELK 或 Datadog 進行收集與查詢，亦支援切換為 Plain Text 格式。
 - **預設 ERROR 日誌門檻等級 (Zero Noise)**：記錄門檻預設為 **`ERROR`**（僅記錄錯誤與 Panic，初次啟動與一般運作不產生多餘雜訊），使用者可隨時於設定中自由切換為 `DEBUG`、`INFO`、`WARN` 或 `ERROR`。
 - **全域 Panic Hook 與前端未捕獲錯誤攔截**：自動註冊 Rust `std::panic::set_hook` 以及前端 `window.onerror` / `unhandledrejection` 監聽器，任何異常皆會連同行號寫入日誌檔。
