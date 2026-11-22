@@ -1,6 +1,6 @@
 use crate::models::{
-    normalize_path_str, DirectoryListing, EntryKind, FileEntry, FilePreviewData, SpecialLocation,
-    SystemLocations, VolumeInfo,
+    normalize_path_str, DirStats, DirectoryListing, EntryKind, FileEntry, FilePreviewData,
+    ItemDetailedInfo, SpecialLocation, SystemLocations, VolumeInfo,
 };
 use lru::LruCache;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
@@ -539,9 +539,268 @@ pub fn read_file_preview(raw_path: &str) -> Result<FilePreviewData, String> {
     })
 }
 
+/// 產生易讀的檔案類型說明
+pub fn get_file_type_description(ext: &str, is_dir: bool, is_symlink: bool, kind: EntryKind) -> String {
+    if is_symlink {
+        return "符號連結 / 捷徑 (Symlink)".to_string();
+    }
+    if is_dir {
+        return "資料夾 (Folder)".to_string();
+    }
+    let lower_ext = ext.to_ascii_lowercase();
+    match lower_ext.as_str() {
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "ico" | "tiff" | "avif" => {
+            format!("{} 影像檔 (.{})", ext.to_ascii_uppercase(), ext)
+        }
+        "mp4" | "mkv" | "webm" | "avi" | "mov" | "wmv" | "flv" | "m4v" => {
+            format!("{} 視訊影片 (.{})", ext.to_ascii_uppercase(), ext)
+        }
+        "mp3" | "wav" | "flac" | "ogg" | "m4a" | "aac" | "opus" | "wma" => {
+            format!("{} 音訊檔案 (.{})", ext.to_ascii_uppercase(), ext)
+        }
+        "zip" | "tar" | "gz" | "tgz" | "7z" | "rar" | "bz2" | "xz" | "zst" | "iso" => {
+            format!("{} 壓縮封存檔 (.{})", ext.to_ascii_uppercase(), ext)
+        }
+        "rs" => "Rust 原始程式碼 (.rs)".to_string(),
+        "ts" => "TypeScript 原始程式碼 (.ts)".to_string(),
+        "tsx" => "TypeScript React 元件 (.tsx)".to_string(),
+        "js" => "JavaScript 原始碼 (.js)".to_string(),
+        "jsx" => "JavaScript React 元件 (.jsx)".to_string(),
+        "py" => "Python 腳本檔案 (.py)".to_string(),
+        "go" => "Go 語言原始碼 (.go)".to_string(),
+        "c" | "h" => "C 語言原始碼 / 標頭檔".to_string(),
+        "cpp" | "hpp" | "cc" => "C++ 語言原始碼 / 標頭檔".to_string(),
+        "java" => "Java 原始碼檔案 (.java)".to_string(),
+        "cs" => "C# 原始碼檔案 (.cs)".to_string(),
+        "json" => "JSON 資料格式檔 (.json)".to_string(),
+        "yaml" | "yml" => "YAML 設定檔 (.yaml)".to_string(),
+        "toml" => "TOML 設定檔 (.toml)".to_string(),
+        "xml" => "XML 文件 (.xml)".to_string(),
+        "html" | "htm" => "HTML 網頁文件 (.html)".to_string(),
+        "css" | "scss" | "sass" | "less" => "CSS 樣式表檔案".to_string(),
+        "sql" => "SQL 資料庫腳本 (.sql)".to_string(),
+        "sh" | "bash" | "zsh" => "Shell 腳本檔案 (.sh)".to_string(),
+        "ps1" => "PowerShell 腳本檔案 (.ps1)".to_string(),
+        "bat" | "cmd" => "Windows 批次檔 (.bat/.cmd)".to_string(),
+        "exe" => "Windows 可執行檔 (.exe)".to_string(),
+        "msi" => "Windows 安裝封裝檔 (.msi)".to_string(),
+        "md" => "Markdown 說明文件 (.md)".to_string(),
+        "txt" => "純文字文件 (.txt)".to_string(),
+        "pdf" => "PDF 文件 (.pdf)".to_string(),
+        "doc" | "docx" => "Microsoft Word 文件 (.docx)".to_string(),
+        "xls" | "xlsx" => "Microsoft Excel 試算表 (.xlsx)".to_string(),
+        "ppt" | "pptx" => "Microsoft PowerPoint 簡報 (.pptx)".to_string(),
+        "csv" => "CSV 逗點分隔資料檔 (.csv)".to_string(),
+        "log" => "系統或應用程式日誌檔 (.log)".to_string(),
+        _ => {
+            if ext.trim().is_empty() {
+                format!("{:?} 檔案", kind)
+            } else {
+                format!("{} 檔案 (.{})", ext.to_ascii_uppercase(), ext)
+            }
+        }
+    }
+}
+
+/// 讀取檔案或目錄的完整詳細資訊
+pub fn get_item_detailed_info(raw_path: &str) -> Result<ItemDetailedInfo, String> {
+    let path = PathBuf::from(raw_path);
+    if !path.exists() {
+        return Err("指定之路徑不存在".to_string());
+    }
+
+    let symlink_meta = fs::symlink_metadata(&path).map_err(|e| format!("讀取屬性失敗: {}", e))?;
+    let is_symlink = symlink_meta.file_type().is_symlink();
+    let meta = if is_symlink {
+        fs::metadata(&path).unwrap_or_else(|_| symlink_meta.clone())
+    } else {
+        symlink_meta.clone()
+    };
+
+    let is_dir = meta.is_dir();
+    let size = if is_dir { 0 } else { meta.len() };
+    let modified_ms = system_time_to_ms(meta.modified());
+    let created_ms = system_time_to_ms(meta.created());
+    let accessed_ms = system_time_to_ms(meta.accessed());
+
+    let file_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| raw_path.to_string());
+
+    let parent_path = path
+        .parent()
+        .map(normalize_path_str)
+        .unwrap_or_default();
+
+    let is_hidden = is_hidden_entry(&file_name, &meta);
+    let is_readonly = meta.permissions().readonly();
+
+    let extension = if is_dir {
+        String::new()
+    } else {
+        path.extension()
+            .map(|ext| ext.to_string_lossy().to_string())
+            .unwrap_or_default()
+    };
+
+    let kind = EntryKind::from_extension(&extension, is_dir, is_symlink);
+    let type_description = get_file_type_description(&extension, is_dir, is_symlink, kind);
+
+    let symlink_target = if is_symlink {
+        fs::read_link(&path)
+            .ok()
+            .map(|t| normalize_path_str(&t))
+    } else {
+        None
+    };
+
+    Ok(ItemDetailedInfo {
+        name: file_name,
+        path: normalize_path_str(&path),
+        parent_path,
+        is_dir,
+        is_symlink,
+        symlink_target,
+        is_hidden,
+        is_readonly,
+        size,
+        modified_ms,
+        created_ms,
+        accessed_ms,
+        extension,
+        kind,
+        type_description,
+    })
+}
+
+/// 遞迴統計目錄大小、檔案數與子目錄數
+pub fn calculate_dir_stats(raw_path: &str) -> Result<DirStats, String> {
+    let root = PathBuf::from(raw_path);
+    if !root.exists() {
+        return Err("目標目錄不存在".to_string());
+    }
+    if !root.is_dir() {
+        return Err("目標路徑不是目錄".to_string());
+    }
+
+    let mut total_files = 0usize;
+    let mut total_dirs = 0usize;
+    let mut total_bytes = 0u64;
+
+    let mut stack = vec![root];
+
+    while let Some(current_dir) = stack.pop() {
+        if let Ok(read_dir) = fs::read_dir(&current_dir) {
+            for entry in read_dir.filter_map(|e| e.ok()) {
+                let entry_path = entry.path();
+                if let Ok(sym_meta) = fs::symlink_metadata(&entry_path) {
+                    // 若為符號連結，僅計為 1 筆檔案，不深入遍歷以防止無窮迴圈
+                    if sym_meta.file_type().is_symlink() {
+                        total_files += 1;
+                        total_bytes = total_bytes.saturating_add(sym_meta.len());
+                    } else if sym_meta.is_dir() {
+                        total_dirs += 1;
+                        stack.push(entry_path);
+                    } else {
+                        total_files += 1;
+                        total_bytes = total_bytes.saturating_add(sym_meta.len());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(DirStats {
+        total_files,
+        total_dirs,
+        total_bytes,
+    })
+}
+
+/// 統計多個選取項目的總計資訊（包含遞迴展開目錄）
+pub fn calculate_multi_item_stats(paths: Vec<String>) -> Result<DirStats, String> {
+    let mut total_files = 0usize;
+    let mut total_dirs = 0usize;
+    let mut total_bytes = 0u64;
+
+    for raw in paths {
+        let p = PathBuf::from(&raw);
+        if !p.exists() {
+            continue;
+        }
+        if let Ok(sym_meta) = fs::symlink_metadata(&p) {
+            if sym_meta.file_type().is_symlink() {
+                total_files += 1;
+                total_bytes = total_bytes.saturating_add(sym_meta.len());
+            } else if sym_meta.is_dir() {
+                total_dirs += 1;
+                if let Ok(sub_stats) = calculate_dir_stats(&raw) {
+                    total_files += sub_stats.total_files;
+                    total_dirs += sub_stats.total_dirs;
+                    total_bytes = total_bytes.saturating_add(sub_stats.total_bytes);
+                }
+            } else {
+                total_files += 1;
+                total_bytes = total_bytes.saturating_add(sym_meta.len());
+            }
+        }
+    }
+
+    Ok(DirStats {
+        total_files,
+        total_dirs,
+        total_bytes,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_get_item_detailed_info_file_and_dir() {
+        let temp_dir = std::env::temp_dir().join(format!("rfm_test_details_{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let test_file = temp_dir.join("hello.rs");
+        fs::write(&test_file, b"fn main() {}").unwrap();
+
+        // 測試檔案詳細資訊
+        let file_info = get_item_detailed_info(&test_file.to_string_lossy()).unwrap();
+        assert_eq!(file_info.name, "hello.rs");
+        assert_eq!(file_info.is_dir, false);
+        assert_eq!(file_info.extension, "rs");
+        assert_eq!(file_info.kind, EntryKind::Code);
+        assert!(file_info.type_description.contains("Rust"));
+        assert_eq!(file_info.size, 12);
+        assert!(file_info.modified_ms > 0);
+
+        // 測試目錄詳細資訊
+        let dir_info = get_item_detailed_info(&temp_dir.to_string_lossy()).unwrap();
+        assert_eq!(dir_info.is_dir, true);
+        assert_eq!(dir_info.type_description, "資料夾 (Folder)");
+
+        // 測試目錄遞迴統計
+        let sub_dir = temp_dir.join("sub");
+        fs::create_dir_all(&sub_dir).unwrap();
+        fs::write(sub_dir.join("subfile.txt"), b"12345").unwrap();
+
+        let stats = calculate_dir_stats(&temp_dir.to_string_lossy()).unwrap();
+        assert_eq!(stats.total_files, 2); // hello.rs + subfile.txt
+        assert_eq!(stats.total_dirs, 1);  // sub
+        assert_eq!(stats.total_bytes, 17); // 12 + 5
+
+        // 測試多選項目統計
+        let multi_stats = calculate_multi_item_stats(vec![
+            test_file.to_string_lossy().to_string(),
+            sub_dir.to_string_lossy().to_string(),
+        ]).unwrap();
+        assert_eq!(multi_stats.total_files, 2);
+        assert_eq!(multi_stats.total_dirs, 1);
+        assert_eq!(multi_stats.total_bytes, 17);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 
     #[test]
     fn test_get_system_locations_includes_logical_drives() {

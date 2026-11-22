@@ -67,6 +67,36 @@ pub struct FileEntry {
     pub kind: EntryKind,
 }
 
+/// 詳細檔案/目錄屬性資訊（用於右鍵「詳細資訊 / 內容」）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemDetailedInfo {
+    pub name: String,
+    pub path: String,
+    pub parent_path: String,
+    pub is_dir: bool,
+    pub is_symlink: bool,
+    pub symlink_target: Option<String>,
+    pub is_hidden: bool,
+    pub is_readonly: bool,
+    pub size: u64,
+    pub modified_ms: u64,
+    pub created_ms: u64,
+    pub accessed_ms: u64,
+    pub extension: String,
+    pub kind: EntryKind,
+    pub type_description: String,
+}
+
+/// 目錄或多檔案統計資訊
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DirStats {
+    pub total_files: usize,
+    pub total_dirs: usize,
+    pub total_bytes: u64,
+}
+
 /// 目錄讀取結果（包含是否命中快取、讀取耗時毫秒數）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

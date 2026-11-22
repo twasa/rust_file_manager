@@ -173,6 +173,13 @@ export const DEFAULT_KEYBINDINGS: KeybindingItem[] = [
     keyCombo: "Ctrl+`",
     defaultCombo: "Ctrl+`",
   },
+  {
+    id: "open_details",
+    label: "檢視詳細資訊 (內容屬性)",
+    description: "開啟所選項目或目前目錄的詳細資訊與內容屬性對話視窗",
+    keyCombo: "Alt+Enter",
+    defaultCombo: "Alt+Enter",
+  },
 ];
 
 function getBaseName(p: string): string {
