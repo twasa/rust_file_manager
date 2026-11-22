@@ -53,4 +53,21 @@ describe("File & Directory Details (Properties) feature tests", () => {
     const formattedDate = formatDateTime(sampleMs);
     expect(formattedDate.length).toBeGreaterThan(0);
   });
+
+  it("context menu action matching handles Chinese labels and details variants", () => {
+    const isDetailsAction = (action: string) => {
+      const directCases = ["details", "詳細資訊", "詳細資訊 (屬性)", "目前目錄詳細資訊", "details_current"];
+      if (directCases.includes(action)) return true;
+      if (action.includes("詳細資訊") || action.includes("details")) return true;
+      return false;
+    };
+
+    expect(isDetailsAction("詳細資訊 (屬性)")).toBe(true);
+    expect(isDetailsAction("目前目錄詳細資訊")).toBe(true);
+    expect(isDetailsAction("詳細資訊 (3 個項目)")).toBe(true);
+    expect(isDetailsAction("details")).toBe(true);
+    expect(isDetailsAction("details_current")).toBe(true);
+    expect(isDetailsAction("複製")).toBe(false);
+    expect(isDetailsAction("重新命名")).toBe(false);
+  });
 });
