@@ -604,7 +604,11 @@ pub fn get_file_type_description(ext: &str, is_dir: bool, is_symlink: bool, kind
 
 /// 讀取檔案或目錄的完整詳細資訊
 pub fn get_item_detailed_info(raw_path: &str) -> Result<ItemDetailedInfo, String> {
-    let path = PathBuf::from(raw_path);
+    let path = if raw_path.trim().is_empty() || raw_path == "~" {
+        dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
+    } else {
+        PathBuf::from(raw_path)
+    };
     if !path.exists() {
         return Err("指定之路徑不存在".to_string());
     }
@@ -626,7 +630,8 @@ pub fn get_item_detailed_info(raw_path: &str) -> Result<ItemDetailedInfo, String
     let file_name = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| raw_path.to_string());
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| normalize_path_str(&path));
 
     let parent_path = path
         .parent()

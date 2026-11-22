@@ -767,17 +767,34 @@ export const App: React.FC = () => {
           }
           break;
         case "details":
-          if (sel.length > 0) {
+        case "詳細資訊":
+        case "詳細資訊 (屬性)":
+        case "目前目錄詳細資訊":
+          if (action === "目前目錄詳細資訊" || (!entry && sel.length === 0)) {
+            openDetailsModal([dirPath], true);
+          } else if (sel.length > 0) {
             openDetailsModal(sel.map((s) => s.path));
           } else if (entry) {
             openDetailsModal([entry.path]);
+          } else {
+            openDetailsModal([dirPath], true);
           }
           break;
         case "details_current":
           openDetailsModal([dirPath], true);
           break;
         default: {
-          if (action.startsWith("複製")) {
+          if (action.includes("詳細資訊") || action.includes("details")) {
+            if (action.includes("目前目錄") || (!entry && sel.length === 0)) {
+              openDetailsModal([dirPath], true);
+            } else if (sel.length > 0) {
+              openDetailsModal(sel.map((s) => s.path));
+            } else if (entry) {
+              openDetailsModal([entry.path]);
+            } else {
+              openDetailsModal([dirPath], true);
+            }
+          } else if (action.startsWith("複製")) {
             setClipboard({ mode: "copy", paths: sel.map((s) => s.path) });
             notify(`已複製 ${sel.length} 個項目`);
           } else if (action.startsWith("剪下")) {
