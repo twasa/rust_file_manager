@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **檔案與目錄詳細屬性視窗 (Properties / Details Dialog)** (`src/components/DetailsModal.tsx`)：
+  - 右鍵選單全面新增「詳細資訊 (屬性)」項目，完全相容 Windows 檔案總管與標準系統檔案管理器操作習慣。
+  - 支援單選檔案、單選資料夾、多選檔案/目錄群組，以及空白處（目前目錄）之詳細內容屬性檢視。
+  - **一般屬性資訊**：完整展示檔名、類型描述（自動依副檔名解析）、所在目錄與完整路徑（提供一鍵複製）、捷徑目標路徑（Symlink Target）、格式化大小與精確位元組數。
+  - **目錄與多項目遞迴大小統計**：非阻塞背景計算目錄與多選項目所包含之檔案總數、資料夾總數與整體位元組大小。
+  - **時間戳記與屬性標籤**：完整呈現建立時間、修改時間與存取時間；清晰標示唯讀 (Read-only)、隱藏 (Hidden) 與符號連結狀態。
+  - **完整性雜湊校驗分頁**：針對單一檔案提供 MD5、SHA-256、CRC32 雜湊碼一鍵計算與個別複製。
+  - **標準快捷鍵與捷徑**：支援 Windows 標準快速鍵 `Alt+Enter` 開啟詳細資訊視窗、`Esc` 關閉視窗，底部提供「在檔案總管顯示」、「開啟終端機」與「以預設程式開啟」快捷工具列。
+
+---
+
 ## [0.1.3] - 2026-11-22
 
 ### Added

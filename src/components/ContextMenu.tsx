@@ -19,6 +19,7 @@ import {
   RefreshCw,
   CopyCheck,
   Columns,
+  Info,
 } from "lucide-react";
 import type { FileEntry, PaneId } from "../types";
 
@@ -242,6 +243,13 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             shortcut="F5"
             onClick={() => onAction("refresh_force", null)}
           />
+          <div className="my-1 border-t border-slate-800" />
+          <Item
+            icon={<Info size={14} className="text-sky-400" />}
+            label="目前目錄詳細資訊"
+            shortcut="Alt+Enter"
+            onClick={() => onAction("details_current", null)}
+          />
         </>
       )}
 
@@ -320,6 +328,14 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             shortcut="Shift+Delete"
             danger
             onClick={() => onAction("delete_permanent", entry)}
+          />
+
+          <div className="my-1 border-t border-slate-800" />
+          <Item
+            icon={<Info size={14} className="text-sky-400" />}
+            label={isMulti ? `詳細資訊 (${count} 個項目)` : "詳細資訊 (屬性)"}
+            shortcut="Alt+Enter"
+            onClick={() => onAction("details", entry)}
           />
         </>
       )}

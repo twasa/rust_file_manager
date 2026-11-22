@@ -54,6 +54,7 @@ import { BatchRenameModal } from "./components/BatchRenameModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { ConflictDialogModal } from "./components/ConflictDialogModal";
 import { DeleteConfirmModal } from "./components/DeleteConfirmModal";
+import { DetailsModal } from "./components/DetailsModal";
 import type {
   FileEntry,
   PaneId,
@@ -121,7 +122,16 @@ export const App: React.FC = () => {
   const [settingsInitialTab, setSettingsInitialTab] = useState<
     "appearance" | "shortcuts" | "queue" | "config" | "logs"
   >("appearance");
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [detailsModalTargets, setDetailsModalTargets] = useState<string[]>([]);
+  const [detailsModalIsCurrentDir, setDetailsModalIsCurrentDir] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const openDetailsModal = useCallback((paths: string[], isCurrent = false) => {
+    setDetailsModalTargets(paths);
+    setDetailsModalIsCurrentDir(isCurrent);
+    setDetailsModalOpen(true);
+  }, []);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
@@ -518,6 +528,14 @@ export const App: React.FC = () => {
           await apiOpenTerminal(currentTab.path);
           break;
         }
+        case "open_details": {
+          if (selectedEntries.length > 0) {
+            openDetailsModal(selectedEntries.map((e) => e.path));
+          } else {
+            openDetailsModal([currentTab.path], true);
+          }
+          break;
+        }
       }
     },
     [
@@ -542,6 +560,7 @@ export const App: React.FC = () => {
       setClipboard,
       setShowQueueDrawer,
       executePasteToDir,
+      openDetailsModal,
       notify,
     ]
   );
@@ -567,7 +586,8 @@ export const App: React.FC = () => {
       if (
         batchRenameModalOpen ||
         settingsModalOpen ||
-        pendingDeletePrompt
+        pendingDeletePrompt ||
+        detailsModalOpen
       )
         return;
 
@@ -606,6 +626,7 @@ export const App: React.FC = () => {
     batchRenameModalOpen,
     settingsModalOpen,
     pendingDeletePrompt,
+    detailsModalOpen,
     selectedEntries,
     activePane,
     navigateTab,
@@ -744,6 +765,16 @@ export const App: React.FC = () => {
               notify(`已排入佇列：永久刪除 (${sel.length} 項)`);
             }
           }
+          break;
+        case "details":
+          if (sel.length > 0) {
+            openDetailsModal(sel.map((s) => s.path));
+          } else if (entry) {
+            openDetailsModal([entry.path]);
+          }
+          break;
+        case "details_current":
+          openDetailsModal([dirPath], true);
           break;
         default: {
           if (action.startsWith("複製")) {
@@ -1136,6 +1167,15 @@ export const App: React.FC = () => {
 
       {/* 刪除檔案防呆確認對話框 */}
       <DeleteConfirmModal onNotify={notify} />
+
+      {/* 檔案或目錄詳細資訊屬性視窗 */}
+      <DetailsModal
+        visible={detailsModalOpen}
+        targetPaths={detailsModalTargets}
+        isCurrentDir={detailsModalIsCurrentDir}
+        onClose={() => setDetailsModalOpen(false)}
+        onNotify={notify}
+      />
     </div>
   );
 };

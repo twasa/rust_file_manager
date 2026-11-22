@@ -4,9 +4,11 @@ import type {
   BatchRenamePreviewItem,
   BatchRenameRule,
   ConflictStrategy,
+  DirStats,
   DirectoryListing,
   FileChecksumResult,
   FilePreviewData,
+  ItemDetailedInfo,
   LogFormat,
   LogLevel,
   QueueRetentionPolicy,
@@ -76,6 +78,47 @@ export async function apiReadDirectory(
 
 export async function apiReadFilePreview(path: string): Promise<FilePreviewData> {
   return invoke<FilePreviewData>("cmd_read_file_preview", { path });
+}
+
+export async function apiGetItemDetailedInfo(
+  path: string
+): Promise<ItemDetailedInfo> {
+  if (!isTauriRuntime()) {
+    return {
+      name: path.split("/").pop() || path,
+      path,
+      parentPath: path.split("/").slice(0, -1).join("/") || "/",
+      isDir: false,
+      isSymlink: false,
+      symlinkTarget: null,
+      isHidden: false,
+      isReadonly: false,
+      size: 1024,
+      modifiedMs: Date.now(),
+      createdMs: Date.now(),
+      accessedMs: Date.now(),
+      extension: path.split(".").pop() || "",
+      kind: "file",
+      typeDescription: "檔案",
+    };
+  }
+  return invoke<ItemDetailedInfo>("cmd_get_item_detailed_info", { path });
+}
+
+export async function apiCalculateDirStats(path: string): Promise<DirStats> {
+  if (!isTauriRuntime()) {
+    return { totalFiles: 0, totalDirs: 0, totalBytes: 0 };
+  }
+  return invoke<DirStats>("cmd_calculate_dir_stats", { path });
+}
+
+export async function apiCalculateMultiItemStats(
+  paths: string[]
+): Promise<DirStats> {
+  if (!isTauriRuntime()) {
+    return { totalFiles: paths.length, totalDirs: 0, totalBytes: 0 };
+  }
+  return invoke<DirStats>("cmd_calculate_multi_item_stats", { paths });
 }
 
 export async function apiCreateDirectory(

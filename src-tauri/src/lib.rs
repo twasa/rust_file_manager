@@ -6,15 +6,19 @@ pub mod queue;
 pub mod system_ops;
 
 use batch_rename::{execute_batch_rename, preview_batch_rename, undo_batch_rename};
-use fs_ops::{get_system_locations, read_directory_cached, read_file_preview, FsCacheState};
+use fs_ops::{
+    calculate_dir_stats, calculate_multi_item_stats, get_item_detailed_info, get_system_locations,
+    read_directory_cached, read_file_preview, FsCacheState,
+};
 use logger::{
     diagnose_config_value, resolve_app_directory, resolve_log_directory, AppLogger, LogFormat,
     LogLevel, StructuredLogRecord,
 };
 use models::{
     normalize_path_str, BatchRenameExecutionResult, BatchRenamePreviewItem, BatchRenameRule,
-    ConflictStrategy, DirectoryListing, FileChecksumResult, FilePreviewData, QueueRetentionPolicy,
-    SystemLocations, TransferConflictItem, TransferJobSnapshot, TransferJobType,
+    ConflictStrategy, DirStats, DirectoryListing, FileChecksumResult, FilePreviewData,
+    ItemDetailedInfo, QueueRetentionPolicy, SystemLocations, TransferConflictItem,
+    TransferJobSnapshot, TransferJobType,
 };
 use queue::QueueManager;
 use serde_json::{json, Value};
@@ -56,6 +60,27 @@ async fn cmd_read_directory(
 #[tauri::command]
 async fn cmd_read_file_preview(path: String) -> Result<FilePreviewData, String> {
     tokio::task::spawn_blocking(move || read_file_preview(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn cmd_get_item_detailed_info(path: String) -> Result<ItemDetailedInfo, String> {
+    tokio::task::spawn_blocking(move || get_item_detailed_info(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn cmd_calculate_dir_stats(path: String) -> Result<DirStats, String> {
+    tokio::task::spawn_blocking(move || calculate_dir_stats(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn cmd_calculate_multi_item_stats(paths: Vec<String>) -> Result<DirStats, String> {
+    tokio::task::spawn_blocking(move || calculate_multi_item_stats(paths))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -661,6 +686,9 @@ pub fn run() {
             cmd_get_system_locations,
             cmd_read_directory,
             cmd_read_file_preview,
+            cmd_get_item_detailed_info,
+            cmd_calculate_dir_stats,
+            cmd_calculate_multi_item_stats,
             cmd_create_directory,
             cmd_create_file,
             cmd_rename_item,

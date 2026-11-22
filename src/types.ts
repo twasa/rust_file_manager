@@ -165,6 +165,30 @@ export interface FilePreviewData {
   dirItemCount: number | null;
 }
 
+export interface ItemDetailedInfo {
+  name: string;
+  path: string;
+  parentPath: string;
+  isDir: boolean;
+  isSymlink: boolean;
+  symlinkTarget: string | null;
+  isHidden: boolean;
+  isReadonly: boolean;
+  size: number;
+  modifiedMs: number;
+  createdMs: number;
+  accessedMs: number;
+  extension: string;
+  kind: EntryKind;
+  typeDescription: string;
+}
+
+export interface DirStats {
+  totalFiles: number;
+  totalDirs: number;
+  totalBytes: number;
+}
+
 export type SortField = "name" | "size" | "modifiedMs" | "extension";
 export type SortDirection = "asc" | "desc";
 export type ViewMode = "details" | "grid";
@@ -206,7 +230,8 @@ export type ShortcutActionId =
   | "toggle_dual_pane"
   | "toggle_queue"
   | "toggle_hidden"
-  | "open_terminal";
+  | "open_terminal"
+  | "open_details";
 
 export interface KeybindingItem {
   id: ShortcutActionId;
