@@ -74,7 +74,14 @@
 | **返回上一層目錄** | `Backspace` | 導覽至父目錄 |
 | **在目前目錄開啟終端機** | `` Ctrl+` `` | 啟動 PowerShell 7 / Windows Terminal / macOS & Linux Terminal |
 
-### 8. 高效操作性：打字自動跳轉 (Type-to-Select) 與滑鼠框選多檔案 (Marquee Selection) (`src/components/FilePane.tsx`)
+### 8. 高效操作性：鍵盤游標移動導覽 (Keyboard Navigation)、打字自動跳轉 (Type-to-Select) 與滑鼠框選多檔案 (Marquee Selection) (`src/components/FilePane.tsx`)
+- **鍵盤游標移動導航 (Keyboard Arrow Navigation)** (`src/utils/keyboardNavigation.ts` & `src/components/FilePane.tsx`)：
+  - **上下方向鍵移動游標**：按 `ArrowUp` 與 `ArrowDown` 正確移動檔案焦點與選取游標，徹底攔截瀏覽器原生網頁滾動預設行為（不再像滑鼠滾輪般單純滾動畫面）。
+  - **視窗自動捲動至焦點**：游標移動時若接近或超出可視畫面，自動透過 `@tanstack/react-virtual` 將目標檔案捲入可視區內。
+  - **Shift 連續範圍選取**：按住 `Shift + ArrowUp / ArrowDown` 保持錨點並連續擴展或縮減選取範圍。
+  - **網格檢視多欄自適應**：在網格檢視 (Grid View) 模式下，自動依螢幕排版寬度動態計算欄數，按上下鍵依整列跨欄跳轉、按左右鍵移動相鄰項目。
+  - **首尾與換頁鍵支援**：支援 `Home`（移至首項）、`End`（移至尾項）、`PageUp` / `PageDown`（依畫面高度快速換頁）。
+  - **輸入框與彈跳視窗防誤觸**：當使用者處於搜尋框、路徑列、重新命名輸入框或 Modal 對話框時自動停用，確保輸入行為不受干擾。
 - **打字自動跳轉檔案 (Type-to-Select / Quick Jump)**：
   - **前綴即時匹配**：在檔案列表任意處直接鍵入字母（例如連續輸入 `doc` 或 `proj`），焦點與選取游標即時跳轉至開頭相符的檔案，並自動捲動至可視範圍中央。
   - **單字母重複循環跳轉**：連續重複按下同一個字母（例如連續按 `p`、`p`、`p`），將在所有以該字母開頭的項目間依序循環切換。

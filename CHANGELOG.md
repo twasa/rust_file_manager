@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **鍵盤游標移動導覽與連續選取 (Keyboard Arrow Navigation)** (`src/utils/keyboardNavigation.ts` & `src/components/FilePane.tsx`)：
+  - 支援按鍵盤 `ArrowUp` 與 `ArrowDown` 於檔案清單中移動焦點游標，並自動捲動目標項目至可視區域。
+  - 支援 `Shift + ArrowUp / ArrowDown` 保持錨點連續擴展或縮減選取範圍。
+  - 支援網格檢視模式（Grid View）跨欄上下列跳轉與左右項移動。
+  - 支援 `Home`、`End`、`PageUp`、`PageDown` 快速移動。
+  - 輸入框（路徑列、搜尋過濾框、重新命名輸入）與對話視窗防誤觸隔離。
 - **檔案與目錄詳細屬性視窗 (Properties / Details Dialog)** (`src/components/DetailsModal.tsx`)：
   - 右鍵選單全面新增「詳細資訊 (屬性)」項目，完全相容 Windows 檔案總管與標準系統檔案管理器操作習慣。
   - 支援單選檔案、單選資料夾、多選檔案/目錄群組，以及空白處（目前目錄）之詳細內容屬性檢視。
@@ -18,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **標準快捷鍵與捷徑**：支援 Windows 標準快速鍵 `Alt+Enter` 開啟詳細資訊視窗、`Esc` 關閉視窗，底部提供「在檔案總管顯示」、「開啟終端機」與「以預設程式開啟」快捷工具列。
 
 ### Fixed
+- **修復鍵盤上下方向鍵未移動選取項目而僅像滑鼠滾輪滾動容器的問題** (`src/components/FilePane.tsx`)：
+  - 攔截瀏覽器容器預設捲動行為（`e.preventDefault()`），將方向鍵操作綁定至檔案清單游標移動與選取更新，確保方向鍵聚焦並跟隨檔案游標。
 - **修復右鍵選單點擊詳細資訊無反應問題** (`src/App.tsx`)：
   - 修正右鍵功能表動作分派比對遺漏 UI 顯示文字（`詳細資訊 (屬性)`、`目前目錄詳細資訊`、`詳細資訊 (N 個項目)`），導致點擊後未能觸發彈窗的缺陷。
   - 後端 `get_item_detailed_info` 補強根目錄（如 `C:/`）與家目錄符號（`~`）之安全路徑解析與空檔名回退。
