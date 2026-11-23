@@ -5,9 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.4] - 2026-11-24
 
 ### Added
+- **macOS 權限解除輔助腳本 (macOS Postinstall Helper)** (`scripts/macos-postinstall.sh`)：
+  - 提供一鍵解除 macOS Gatekeeper 隔離屬性 (`xattr -cr`) 輔助腳本，解決未簽署應用程式安裝後無法直接執行的問題。
+  - 支援預設 `/Applications/Rust File Manager.app` 與自訂目標路徑參數。
 - **鍵盤游標移動導覽與連續選取 (Keyboard Arrow Navigation)** (`src/utils/keyboardNavigation.ts` & `src/components/FilePane.tsx`)：
   - 支援按鍵盤 `ArrowUp` 與 `ArrowDown` 於檔案清單中移動焦點游標，並自動捲動目標項目至可視區域。
   - 支援 `Shift + ArrowUp / ArrowDown` 保持錨點連續擴展或縮減選取範圍。

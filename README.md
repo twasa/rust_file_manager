@@ -144,6 +144,7 @@ rust_file_manager/
 ├── scripts/                      # 跨平台開發環境安裝與 Release 打包腳本
 │   ├── build-release.ps1         # PowerShell 單一執行檔 (Portable) 與安裝包打包腳本
 │   ├── build-release.sh          # Bash 單一執行檔與安裝包打包腳本
+│   ├── macos-postinstall.sh      # macOS 安裝後解除 Gatekeeper 隔離屬性腳本
 │   ├── setup-dev-env.ps1         # PowerShell 7+ 定版開發環境安裝腳本 (Windows / Linux / macOS)
 │   └── setup-dev-env.sh          # Bash / Zsh 定版開發環境安裝腳本 (Linux / macOS / Windows Git Bash)
 ├── src/                          # React 18 + TypeScript 前端原始碼
@@ -278,6 +279,19 @@ Tauri 2.x 會將前端所有靜態資源（HTML / CSS / JS）直接嵌入編譯�
 
 # 2. 完整編譯單一執行檔與當前系統所有安裝包 (.deb / .rpm / .AppImage / .dmg)
 ./scripts/build-release.sh
+```
+
+#### macOS 安裝後解除 Gatekeeper 隔離屬性
+在 macOS 下載 `.dmg` 或安裝 `Rust File Manager.app` 後，若出現「無法打開，因為無法驗證開發者」或「已損毀」提示，可執行專屬輔助腳本一鍵清除隔離旗標：
+```bash
+chmod +x ./scripts/macos-postinstall.sh
+./scripts/macos-postinstall.sh
+# 若應用程式非安裝在預設 /Applications 目錄，可傳入路徑參數：
+# ./scripts/macos-postinstall.sh ~/Downloads/"Rust File Manager.app"
+```
+亦可手動在終端機執行：
+```bash
+xattr -cr "/Applications/Rust File Manager.app"
 ```
 
 #### 跨平台雲端自動打包 (GitHub Actions CI/CD)
