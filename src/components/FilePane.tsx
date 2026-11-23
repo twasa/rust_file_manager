@@ -34,6 +34,10 @@ import { useAppStore } from "../store/useAppStore";
 import { formatBytes, formatDateTime, keyboardEventToCombo } from "../utils/formatters";
 import { findTypeAheadMatchIndex, isTypeAheadKey } from "../utils/typeAhead";
 import {
+  computeKeyboardNavigation,
+  isKeyboardNavigationKey,
+} from "../utils/keyboardNavigation";
+import {
   calculateMarqueeBox,
   getDetailsIntersectedIndices,
   computeMarqueeSelection,
@@ -138,6 +142,32 @@ export const FilePane: React.FC<FilePaneProps> = ({
       typeAheadTimerRef.current = null;
     }
   }, []);
+
+  // 鍵盤游標與連續選取錨點狀態
+  const navAnchorRef = useRef<{
+    anchorPath: string;
+    cursorPath: string;
+  } | null>(null);
+
+  useEffect(() => {
+    navAnchorRef.current = null;
+  }, [activeTab?.path]);
+
+  // 動態偵測網格檢視每列包含的卡片欄數
+  const getGridColumns = useCallback((): number => {
+    if (activeTab?.viewMode !== "grid" || !parentRef.current) return 1;
+    const cards = parentRef.current.querySelectorAll<HTMLElement>(
+      "[data-file-grid-card='true']"
+    );
+    if (cards.length < 2) return 1;
+    const firstTop = cards[0].offsetTop;
+    for (let i = 1; i < cards.length; i++) {
+      if (cards[i].offsetTop > firstTop) {
+        return i;
+      }
+    }
+    return cards.length;
+  }, [activeTab?.viewMode]);
 
   // 滑鼠框選 (Marquee Selection) 狀態
   const [marqueeBox, setMarqueeBox] = useState<MarqueeBox | null>(null);
@@ -376,6 +406,10 @@ export const FilePane: React.FC<FilePaneProps> = ({
         const end = Math.max(lastIdx, index);
         const rangePaths = processedEntries.slice(start, end + 1).map((i) => i.path);
         setTabSelection(pane, rangePaths, lastPath);
+        navAnchorRef.current = {
+          anchorPath: lastPath,
+          cursorPath: entry.path,
+        };
         return;
       }
     }
@@ -386,13 +420,22 @@ export const FilePane: React.FC<FilePaneProps> = ({
         ? currentSelected.filter((p) => p !== entry.path)
         : [...currentSelected, entry.path];
       setTabSelection(pane, next, entry.path);
+      navAnchorRef.current = {
+        anchorPath: entry.path,
+        cursorPath: entry.path,
+      };
     } else {
       setTabSelection(pane, [entry.path], entry.path);
+      navAnchorRef.current = {
+        anchorPath: entry.path,
+        cursorPath: entry.path,
+      };
     }
   };
 
   const handleRowDoubleClick = async (entry: FileEntry) => {
     setActivePane(pane);
+    navAnchorRef.current = null;
     if (entry.isDir) {
       navigateTab(pane, entry.path);
     } else {
@@ -500,7 +543,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
     };
   }, []);
 
-  // 監聽鍵盤事件以執行打字跳轉 (Type-to-Select)
+  // 監聽鍵盤事件以執行檔案光標移動 (Keyboard Cursor Navigation) 與打字跳轉 (Type-to-Select)
   useEffect(() => {
     const handleWindowKeyDown = (e: KeyboardEvent) => {
       if (activePane !== pane) return;
@@ -518,9 +561,80 @@ export const FilePane: React.FC<FilePaneProps> = ({
         return;
       }
 
+      // 若有開啟全螢幕對話框 (如設定、詳細資訊、衝突提示等) 則不攔截鍵盤導覽
+      if (document.querySelector(".fixed.inset-0.z-50")) {
+        return;
+      }
+
       if (e.key === "Escape") {
         clearTypeAhead();
         return;
+      }
+
+      // 方向鍵與游標移動導覽 (ArrowUp, ArrowDown, Home, End, PageUp, PageDown 等)
+      if (
+        isKeyboardNavigationKey(e.key) &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        clearTypeAhead();
+
+        const currentSelectedPath =
+          navAnchorRef.current?.cursorPath ||
+          activeTab?.lastSelectedPath ||
+          activeTab?.selectedPaths[0];
+
+        const anchorPath =
+          navAnchorRef.current?.anchorPath || activeTab?.lastSelectedPath;
+
+        const pageSize = Math.max(
+          1,
+          Math.floor(
+            (parentRef.current?.clientHeight || 400) /
+              (activeTab?.viewMode === "grid" ? 140 : fontSettings.rowHeightPx)
+          ) * (activeTab?.viewMode === "grid" ? getGridColumns() : 1)
+        );
+
+        const navResult = computeKeyboardNavigation({
+          key: e.key,
+          isShift: e.shiftKey,
+          entries: processedEntries,
+          currentSelectedPath,
+          anchorPath,
+          viewMode: activeTab?.viewMode,
+          gridColumns: getGridColumns(),
+          pageSize,
+        });
+
+        if (navResult) {
+          e.preventDefault();
+          navAnchorRef.current = {
+            anchorPath: navResult.anchorPath,
+            cursorPath: navResult.nextPath,
+          };
+          setTabSelection(pane, navResult.selectedPaths, navResult.nextPath);
+
+          if (activeTab?.viewMode !== "grid") {
+            rowVirtualizer.scrollToIndex(navResult.nextIndex, { align: "auto" });
+          } else {
+            const gridItems =
+              parentRef.current?.querySelectorAll<HTMLElement>(
+                "[data-grid-item-path]"
+              );
+            if (gridItems) {
+              for (const item of gridItems) {
+                if (
+                  item.getAttribute("data-grid-item-path") === navResult.nextPath
+                ) {
+                  item.scrollIntoView({ block: "nearest", inline: "nearest" });
+                  break;
+                }
+              }
+            }
+          }
+          return;
+        }
       }
 
       if (!isTypeAheadKey(e)) return;
@@ -566,6 +680,10 @@ export const FilePane: React.FC<FilePaneProps> = ({
 
       if (matchIdx !== -1) {
         const matched = processedEntries[matchIdx];
+        navAnchorRef.current = {
+          anchorPath: matched.path,
+          cursorPath: matched.path,
+        };
         setTabSelection(pane, [matched.path], matched.path);
         if (activeTab?.viewMode !== "grid") {
           rowVirtualizer.scrollToIndex(matchIdx, { align: "auto" });
@@ -600,6 +718,8 @@ export const FilePane: React.FC<FilePaneProps> = ({
     setTabSelection,
     rowVirtualizer,
     clearTypeAhead,
+    fontSettings.rowHeightPx,
+    getGridColumns,
   ]);
 
   // 處理滑鼠在容器內空白處按住拖曳框選 (Marquee Selection)
@@ -1037,6 +1157,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
         onMouseDown={handleContainerMouseDown}
         onClick={() => {
           clearTypeAhead();
+          navAnchorRef.current = null;
           if (justFinishedMarqueeRef.current) {
             justFinishedMarqueeRef.current = false;
             return;
@@ -1249,7 +1370,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
                     isDropTarget
                       ? "bg-amber-500/25 ring-1 ring-amber-400 text-white"
                       : isSelected
-                      ? "bg-blue-600/25 text-white"
+                      ? "bg-blue-600/25 ring-1 ring-inset ring-blue-500/40 text-white"
                       : "hover:bg-slate-900/80 text-slate-200"
                   } ${entry.isHidden ? "opacity-60" : ""}`}
                 >
