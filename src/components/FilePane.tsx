@@ -1215,11 +1215,11 @@ export const FilePane: React.FC<FilePaneProps> = ({
                   draggable={!isRenaming}
                   onDragStart={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     const paths = isSelected
                       ? activeTab.selectedPaths
                       : [entry.path];
                     setDragPayload({ sourcePane: pane, paths });
-                    e.dataTransfer.setData("text/plain", paths.join("\n"));
                     apiStartNativeDrag(paths, false);
                   }}
                   onDragOver={(e) => {
@@ -1317,11 +1317,11 @@ export const FilePane: React.FC<FilePaneProps> = ({
                   draggable={!isRenaming}
                   onDragStart={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     const paths = isSelected
                       ? activeTab.selectedPaths
                       : [entry.path];
                     setDragPayload({ sourcePane: pane, paths });
-                    e.dataTransfer.setData("text/plain", paths.join("\n"));
                     apiStartNativeDrag(paths, false);
                   }}
                   onDragOver={(e) => {

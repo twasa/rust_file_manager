@@ -57,14 +57,16 @@ function Get-TargetDriveInfo([string]$Path) {
     }
 }
 
-# 確保本地 node_modules 與 Tauri CLI 存在，若不存在則自動執行 npm install
+# 確保本地 node_modules、Tauri CLI 與核心相依套件存在，若缺漏則自動執行 npm install
 $TauriCmd = Join-Path $ProjectRoot "node_modules/.bin/tauri.cmd"
 $TauriBin = Join-Path $ProjectRoot "node_modules/.bin/tauri"
-if ((-not (Test-Path $TauriCmd)) -and (-not (Test-Path $TauriBin))) {
-    Write-Host "[INFO]  未偵測到本機 node_modules 或 Tauri CLI，自動執行 npm install..." -ForegroundColor Cyan
+$DragPluginPkg = Join-Path $ProjectRoot "node_modules/@crabnebula/tauri-plugin-drag"
+$NeedNpmInstall = (-not (Test-Path $TauriCmd) -and -not (Test-Path $TauriBin)) -or (-not (Test-Path $DragPluginPkg))
+if ($NeedNpmInstall) {
+    Write-Host "[INFO]  未偵測到完整 node_modules 或必要相依套件，自動執行 npm install..." -ForegroundColor Cyan
     Push-Location $ProjectRoot
     try {
-        npm install --no-fund --no-audit
+        npm install --prefer-offline --no-fund --no-audit
         if ($LASTEXITCODE -ne 0) {
             throw "npm install 失敗，退出碼: $LASTEXITCODE"
         }

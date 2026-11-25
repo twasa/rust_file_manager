@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import type {
   BatchRenameExecutionResult,
   BatchRenamePreviewItem,
@@ -406,20 +407,41 @@ export async function apiSetSystemClipboardFiles(
 const TRANSPARENT_DRAG_ICON =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
+export const isWindowsPlatform = (): boolean => {
+  if (typeof navigator !== "undefined") {
+    return navigator.userAgent.toLowerCase().includes("win");
+  }
+  return true;
+};
+
+export const toNativePath = (p: string): string => {
+  if (/^[a-zA-Z]:[/\\]/.test(p) || p.startsWith("\\\\") || isWindowsPlatform()) {
+    return p.replace(/\//g, "\\");
+  }
+  return p;
+};
+
 export async function apiStartNativeDrag(
   paths: string[],
   isCut = false
 ): Promise<void> {
   if (!isTauriRuntime() || paths.length === 0) return;
   try {
-    const { startDrag } = await import("@crabnebula/tauri-plugin-drag");
+    const nativePaths = paths.map(toNativePath);
     await startDrag({
-      item: paths,
+      item: nativePaths,
       icon: TRANSPARENT_DRAG_ICON,
       mode: isCut ? "move" : "copy",
     });
   } catch (err) {
     console.error("apiStartNativeDrag error:", err);
+    apiWriteFrontendLog(
+      "ERROR",
+      "frontend::drag",
+      "start_native_drag_failed",
+      String(err),
+      { paths }
+    ).catch(() => {});
   }
 }
 

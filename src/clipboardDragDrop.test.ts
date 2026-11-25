@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   apiGetSystemClipboardFiles,
   apiSetSystemClipboardFiles,
+  apiStartNativeDrag,
   isTauriRuntime,
   SystemClipboardFilesResult,
+  toNativePath,
 } from "./api";
 
 describe("System Clipboard and Native Drag & Drop Integration", () => {
@@ -20,6 +22,19 @@ describe("System Clipboard and Native Drag & Drop Integration", () => {
     await expect(
       apiSetSystemClipboardFiles(["D:/Music/song.mp3"], false)
     ).resolves.toBeUndefined();
+  });
+
+  it("safely handles native drag initiation in non-Tauri test runtime", async () => {
+    await expect(
+      apiStartNativeDrag(["D:/Music/song.mp3"], false)
+    ).resolves.toBeUndefined();
+  });
+
+  it("converts Windows drive paths to standard native backslash separators", () => {
+    expect(toNativePath("D:/devops/music/song.mp3")).toBe(
+      "D:\\devops\\music\\song.mp3"
+    );
+    expect(toNativePath("C:/Windows/System32")).toBe("C:\\Windows\\System32");
   });
 
   it("validates data structure and properties of SystemClipboardFilesResult", () => {

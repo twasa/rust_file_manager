@@ -388,13 +388,40 @@ export const App: React.FC = () => {
     ]
   );
 
-  // 處理自外部拖入應用程式的實體檔案
+  // 處理自外部或原生拖入應用程式的實體檔案
   const handleExternalDroppedFiles = useCallback(
     async (sources: string[], targetDirPath: string) => {
-      const validSources = sources.filter((p) => p !== targetDirPath);
+      const normTarget = targetDirPath.replace(/\\/g, "/").replace(/\/$/, "");
+      const validSources = sources
+        .map((p) => p.replace(/\\/g, "/"))
+        .filter((p) => {
+          const normP = p.replace(/\/$/, "");
+          if (normP.toLowerCase() === normTarget.toLowerCase()) return false;
+          // 若父目錄已是目標目錄，且無額外意圖，則略過多餘操作
+          const lastSlash = normP.lastIndexOf("/");
+          if (lastSlash > 0) {
+            const parentDir = normP.substring(0, lastSlash);
+            if (parentDir.toLowerCase() === normTarget.toLowerCase()) {
+              return false;
+            }
+          }
+          return true;
+        });
       if (validSources.length === 0) return;
 
-      const jobType = "copy"; // 外部拖入預設為複製
+      const currentDragPayload = useAppStore.getState().dragPayload;
+      const isInternal =
+        currentDragPayload &&
+        currentDragPayload.paths.length > 0 &&
+        currentDragPayload.paths.some((p) =>
+          validSources.includes(p.replace(/\\/g, "/"))
+        );
+
+      if (isInternal) {
+        useAppStore.getState().setDragPayload(null);
+      }
+
+      const jobType = "copy"; // 拖入預設為複製
       try {
         if (conflictStrategy === "ask") {
           const conflicts = await apiCheckTransferConflicts(
@@ -418,9 +445,13 @@ export const App: React.FC = () => {
           conflictStrategy
         );
         setShowQueueDrawer(true);
-        notify(`已從外部拖入並加入傳輸佇列：${validSources.length} 個項目`);
+        notify(
+          isInternal
+            ? `已排入傳輸佇列：${validSources.length} 個項目至 ${targetDirPath}`
+            : `已從外部拖入並加入傳輸佇列：${validSources.length} 個項目`
+        );
       } catch (err) {
-        notify(`外部檔案拖入失敗: ${String(err)}`);
+        notify(`檔案拖入佇列失敗: ${String(err)}`);
       }
     },
     [conflictStrategy, notify, setPendingConflictPrompt, setShowQueueDrawer]
