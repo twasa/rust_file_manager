@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Music, Video, CopyCheck } from "lucide-react";
+import { Music, Video, CopyCheck, AlertCircle, ExternalLink } from "lucide-react";
+import { apiOpenItem } from "../../api";
 import { formatBytes } from "../../utils/formatters";
 import type { PreviewPlugin, PreviewPluginProps } from "../types";
 
@@ -8,6 +9,12 @@ export const MediaPreviewComponent: React.FC<PreviewPluginProps> = ({
   entry,
   onNotify,
 }) => {
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    setLoadError(false);
+  }, [entry.path]);
+
   const isVideo =
     entry.kind === "video" ||
     ["mp4", "webm", "mkv", "avi", "mov", "wmv", "m4v"].includes(
@@ -46,11 +53,37 @@ export const MediaPreviewComponent: React.FC<PreviewPluginProps> = ({
 
       {/* 播放器區域 */}
       <div className="flex-1 overflow-auto flex flex-col items-center justify-center p-4 bg-slate-950/90 gap-4">
-        {isVideo ? (
+        {loadError ? (
+          <div className="flex flex-col items-center justify-center text-center p-6 max-w-md bg-slate-900/80 rounded-xl border border-slate-800 text-slate-300 gap-3">
+            <AlertCircle size={32} className="text-amber-400" />
+            <div className="text-sm font-semibold text-slate-200">
+              無法直接播放此{isVideo ? "影片" : "音訊"}
+            </div>
+            <div className="text-xs text-slate-400 leading-relaxed">
+              系統內建 WebView 播放器主要支援標準串流編碼（如 MP4 / H.264、WebM、MP3、WAV、OGG）。特殊封裝（如 MKV、AVI、WMV、FLAC 或非標準編碼）建議使用系統已安裝的專業影音播放器（如 VLC、MPC-HC、PotPlayer 等）直接開啟。
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await apiOpenItem(entry.path);
+                  onNotify("已使用系統預設播放器開啟");
+                } catch {
+                  onNotify("無法開啟此檔案");
+                }
+              }}
+              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors shadow-sm"
+            >
+              <ExternalLink size={13} />
+              以系統預設程式開啟
+            </button>
+          </div>
+        ) : isVideo ? (
           <div className="w-full max-w-lg rounded-lg overflow-hidden bg-black shadow-xl border border-slate-800">
             <video
               src={mediaSrc}
               controls
+              onError={() => setLoadError(true)}
               className="w-full max-h-[50vh] object-contain"
               preload="metadata"
             >
@@ -68,6 +101,7 @@ export const MediaPreviewComponent: React.FC<PreviewPluginProps> = ({
             <audio
               src={mediaSrc}
               controls
+              onError={() => setLoadError(true)}
               className="w-full mt-1"
               preload="metadata"
             >
