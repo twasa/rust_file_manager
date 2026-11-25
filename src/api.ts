@@ -77,8 +77,14 @@ export async function apiReadDirectory(
   });
 }
 
-export async function apiReadFilePreview(path: string): Promise<FilePreviewData> {
-  return invoke<FilePreviewData>("cmd_read_file_preview", { path });
+export async function apiReadFilePreview(
+  path: string,
+  maxBytes?: number
+): Promise<FilePreviewData> {
+  return invoke<FilePreviewData>("cmd_read_file_preview", {
+    path,
+    maxBytes: maxBytes ?? null,
+  });
 }
 
 export async function apiReadFileChunk(

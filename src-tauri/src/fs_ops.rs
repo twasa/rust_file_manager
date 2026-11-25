@@ -466,8 +466,8 @@ pub fn get_system_locations() -> SystemLocations {
     }
 }
 
-/// 讀取檔案安全預覽（文字前 64KB 或目錄統計）
-pub fn read_file_preview(raw_path: &str) -> Result<FilePreviewData, String> {
+/// 讀取檔案安全預覽（文字前預設 5MB 或目錄統計）
+pub fn read_file_preview(raw_path: &str, custom_max_bytes: Option<usize>) -> Result<FilePreviewData, String> {
     let path = PathBuf::from(raw_path);
     if !path.exists() {
         return Err("檔案或目錄不存在".to_string());
@@ -509,8 +509,8 @@ pub fn read_file_preview(raw_path: &str) -> Result<FilePreviewData, String> {
     }
 
     let size = meta.len();
-    // 讀取最多 64 KB 預覽
-    let max_bytes = 64 * 1024;
+    // 預設讀取上限 5 MB (5 * 1024 * 1024)
+    let max_bytes = custom_max_bytes.unwrap_or(5 * 1024 * 1024).max(1024);
     let mut file = fs::File::open(&path).map_err(|e| e.to_string())?;
     let mut buffer = vec![0u8; (size as usize).min(max_bytes)];
     let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
@@ -874,14 +874,18 @@ mod tests {
         let content = "Line 1: Hello World\nLine 2: Rust File Manager\nLine 3: Plugin Architecture\n";
         fs::write(&test_file, content.as_bytes()).unwrap();
 
-        // 測試 preview
-        let preview = read_file_preview(&test_file.to_string_lossy()).unwrap();
+        // 測試預設 preview (5MB)
+        let preview = read_file_preview(&test_file.to_string_lossy(), None).unwrap();
         assert_eq!(preview.name, "sample.txt");
         assert_eq!(preview.is_binary, false);
         assert_eq!(preview.total_lines, Some(3));
         assert!(preview.text_preview.as_ref().unwrap().contains("Hello World"));
         assert_eq!(preview.has_more, Some(false));
         assert_eq!(preview.loaded_bytes, Some(content.len()));
+
+        // 測試自訂上限 (例如 1024 bytes)
+        let custom_preview = read_file_preview(&test_file.to_string_lossy(), Some(1024)).unwrap();
+        assert_eq!(custom_preview.has_more, Some(false));
 
         // 測試 chunk 讀取
         let chunk1 = read_file_chunk(&test_file.to_string_lossy(), 0, 10).unwrap();

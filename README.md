@@ -62,9 +62,12 @@
   - **音訊與影片原生播放器 (`builtin.media`)**：支援 MP3, WAV, OGG, FLAC, MP4, WebM 等原生多媒體播放器、播放/暫停、時間進度條與音量調節。
   - **Markdown 格式化排版外掛 (`builtin.markdown`)**：支援 Markdown 即時結構排版（標題、粗斜體、引用、清單、GFM 規範表格）、原始碼 (Raw) 與排版視圖一鍵切換、全文一鍵複製。
   - **原始碼與文字高亮預覽器 (`builtin.code`)**：支援常見程式語言（Rust, TS, JS, Python, JSON, CSS, Shell 等）行號對齊顯示、關鍵字語法上色與全文一鍵複製。
-- **大檔案防崩潰與分頁動態載入 (Dynamic Paging & Load More)**：
-  - 初始預覽安全載入 64 KB 內容，確保 UI 零延遲秒開。
-  - 超出安全上限時，底部呈現「載入後續內容 (Load More)」按鈕，動態分段串接，徹底杜絕巨型文字檔撐爆 DOM。
+- **預設 5 MB 預覽上限與自訂設定 (Default 5MB Preview Limit & User Configurable)**：
+  - 後端 `read_file_preview` 與多媒體預覽預設上限全面調升為 **5 MB**（相容普遍多媒體與豐富格式檔案）。
+  - **設定視窗自主配置**：於「設定 -> 外掛功能管理」中提供快捷預設按鈕（1 MB、2 MB、5 MB 預設、10 MB、20 MB、50 MB、100 MB），使用者可依硬體效能彈性配置，並持久化寫入 `settings.json`。
+  - **超額保護防禦**：當檔案大小超出設定之上限時，預覽面板呈現清晰防護提示與容量警示，並提供「強制載入預覽」與「以預設程式開啟」按鈕，防範非預期的超大檔案撐爆記憶體。
+- **大檔案分段動態載入 (Dynamic Paging & Load More)**：
+  - 文字與原始碼支援分段讀取，超出單次預覽範圍時底部提供「載入後續內容 (Load More)」按鈕，動態串接後續內容。
 - **滑鼠拖曳自訂寬度 (Resizable Splitter)**：
   - 預覽面板左邊緣內建拖曳手把，可即時拖曳調整寬度（`260px ~ 800px`），並自動持久化儲存至 `settings.json`。
 - **多選項目統計總覽 (Multi-selection Summary)**：
@@ -139,7 +142,7 @@
 - **檔名安全驗證與保留設備名攔截 (`validate_safe_entry_name`)**：於建立檔案/目錄、原地改名與批次重新命名中，統一攔截路徑跳脫字元（`..`、`/`、`\`、`:`、`\0`）與系統保留設備名（`CON`、`PRN`、`AUX`、`NUL`、`COM1~9`、`LPT1~9`）。
 - **防止目錄遞迴自我複製/搬移炸彈 (`src-tauri/src/queue.rs`)**：佇列執行前強制檢查目標路徑是否為來源目錄之子孫目錄，並於取消任務時自動清除未寫完的殘留檔案。
 - **子行程陣列傳參防範命令注入 (Command Injection Prevention)**：所有外部行程呼叫（`wt`、`pwsh`、`explorer`、`tar`）一律透過 `Command::new().args([...])` 陣列傳遞，不經過 Shell 字串拼接。
-- **設定檔讀寫副檔名與容量保護 (`src-tauri/src/lib.rs`)**：強制限制設定檔讀寫路徑必須為 `.json` 副檔名且不超過 `5 MB`，並於預覽面板限制最多讀取前 `64 KB`，防止任意系統檔案覆寫或大檔記憶體耗盡 (OOM)。
+- **設定檔讀寫副檔名與容量保護 (`src-tauri/src/lib.rs`)**：強制限制設定檔讀寫路徑必須為 `.json` 副檔名且不超過 `5 MB`，並於預覽面板預設限制讀取前 `5 MB`（可自訂調高），防止任意系統檔案覆寫或大檔記憶體耗盡 (OOM)。
 
 ### 14. 結構化 JSON 日誌與設定檔損毀診斷 (`src-tauri/src/logger.rs`)
 - **同層日誌目錄與 JSON Lines (`.jsonl`) 現代化格式**：日誌目錄 `logs/` 預設直接建立於執行檔同層，以單行 JSON (`timestamp`, `level`, `target`, `event`, `message`, `context`, `pid`, `os`) 寫入 `logs/rfm.jsonl`（單檔上限 5 MB 自動輪替 Rotation），方便直接對接 `jq`、Grafana Loki、ELK 或 Datadog 進行收集與查詢，亦支援切換為 Plain Text 格式。

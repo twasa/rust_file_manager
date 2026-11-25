@@ -34,7 +34,7 @@ import {
   flushAutoSave,
   saveSettingsToFile,
 } from "../store/useAppStore";
-import { keyboardEventToCombo } from "../utils/formatters";
+import { formatBytes, keyboardEventToCombo } from "../utils/formatters";
 import { pluginRegistry } from "../plugins/registry";
 import type {
   ConflictStrategy,
@@ -97,6 +97,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const importConfigJson = useAppStore((s) => s.importConfigJson);
   const pluginsConfig = useAppStore((s) => s.pluginsConfig);
   const setPluginEnabled = useAppStore((s) => s.setPluginEnabled);
+  const maxPreviewSizeBytes = useAppStore((s) => s.maxPreviewSizeBytes);
+  const setMaxPreviewSizeBytes = useAppStore((s) => s.setMaxPreviewSizeBytes);
 
   const refreshLogs = async () => {
     setLoadingLogs(true);
@@ -786,6 +788,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <p className="text-[11px] text-slate-400 mt-0.5">
                     所有預覽模組均採動態按需載入。停用不需要的外掛可維持最極簡的記憶體佔用與最輕量的執行環境。
                   </p>
+                </div>
+              </div>
+
+              {/* 預覽檔案大小上限設定 */}
+              <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-semibold text-slate-200">
+                      預覽檔案大小上限 (預設 5 MB)
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      多媒體與文字檔案的初始預覽上限。超出此上限的檔案會先提示，並提供「強制載入預覽」按鈕，防範超大檔案拖慢效能。
+                    </p>
+                  </div>
+                  <span className="font-mono text-xs px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-cyan-300 font-semibold shrink-0">
+                    {formatBytes(maxPreviewSizeBytes)}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {[
+                    { label: "1 MB", bytes: 1 * 1024 * 1024 },
+                    { label: "2 MB", bytes: 2 * 1024 * 1024 },
+                    { label: "5 MB (預設)", bytes: 5 * 1024 * 1024 },
+                    { label: "10 MB", bytes: 10 * 1024 * 1024 },
+                    { label: "20 MB", bytes: 20 * 1024 * 1024 },
+                    { label: "50 MB", bytes: 50 * 1024 * 1024 },
+                    { label: "100 MB", bytes: 100 * 1024 * 1024 },
+                  ].map((preset) => {
+                    const isSelected = maxPreviewSizeBytes === preset.bytes;
+                    return (
+                      <button
+                        key={preset.bytes}
+                        type="button"
+                        onClick={() => setMaxPreviewSizeBytes(preset.bytes)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                          isSelected
+                            ? "bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-sm"
+                            : "bg-slate-800/80 border-slate-700/80 text-slate-300 hover:bg-slate-800 hover:text-white"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

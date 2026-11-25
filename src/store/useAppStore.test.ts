@@ -127,16 +127,23 @@ describe("useAppStore delete confirmation and settings", () => {
     expect(parsed.settings.previewPanelWidth).toBe(450);
     expect(parsed.settings.pluginsConfig["builtin.image"]).toBe(false);
 
+    // 測試預設 5MB 預覽大小上限與修改
+    expect(store.maxPreviewSizeBytes).toBe(5 * 1024 * 1024);
+    store.setMaxPreviewSizeBytes(10 * 1024 * 1024);
+    expect(useAppStore.getState().maxPreviewSizeBytes).toBe(10 * 1024 * 1024);
+
     // 匯入新設定
     useAppStore.getState().importConfigJson(
       JSON.stringify({
         settings: {
           previewPanelWidth: 520,
+          maxPreviewSizeBytes: 20 * 1024 * 1024,
           pluginsConfig: { "builtin.media": false },
         },
       })
     );
     expect(useAppStore.getState().previewPanelWidth).toBe(520);
+    expect(useAppStore.getState().maxPreviewSizeBytes).toBe(20 * 1024 * 1024);
     expect(useAppStore.getState().pluginsConfig["builtin.media"]).toBe(false);
   });
 });
