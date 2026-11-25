@@ -63,6 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {systemLocations?.specialLocations.map((loc) => (
             <button
               key={loc.id}
+              data-drop-folder-path={loc.path}
               type="button"
               onClick={(e) => {
                 if (e.ctrlKey || e.metaKey) {
@@ -100,6 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {bookmarks.map((bm) => (
               <div
                 key={bm.path}
+                data-drop-folder-path={bm.path}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -152,6 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             return (
               <button
                 key={vol.mountPoint}
+                data-drop-folder-path={vol.mountPoint}
                 type="button"
                 onClick={() => navigateTab(activePane, vol.mountPoint)}
                 onDragOver={(e) => e.preventDefault()}

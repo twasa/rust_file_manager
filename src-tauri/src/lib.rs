@@ -1,4 +1,5 @@
 pub mod batch_rename;
+pub mod clipboard_ops;
 pub mod fs_ops;
 pub mod logger;
 pub mod models;
@@ -6,6 +7,7 @@ pub mod queue;
 pub mod system_ops;
 
 use batch_rename::{execute_batch_rename, preview_batch_rename, undo_batch_rename};
+use clipboard_ops::{get_system_clipboard_files, set_system_clipboard_files, ClipboardFilesResult};
 use fs_ops::{
     calculate_dir_stats, calculate_multi_item_stats, get_item_detailed_info, get_system_locations,
     read_directory_cached, read_file_chunk, read_file_preview, FsCacheState,
@@ -677,6 +679,20 @@ fn cmd_write_frontend_log(
         .log(&level, &target, &event, &message, context);
 }
 
+#[tauri::command]
+async fn cmd_get_system_clipboard_files() -> Result<Option<ClipboardFilesResult>, String> {
+    tokio::task::spawn_blocking(get_system_clipboard_files)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn cmd_set_system_clipboard_files(paths: Vec<String>, is_cut: bool) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || set_system_clipboard_files(paths, is_cut))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let logger = AppLogger::new();
@@ -686,6 +702,7 @@ pub fn run() {
     let queue = QueueManager::new(Arc::clone(&cache));
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_drag::init())
         .manage(AppState {
             cache: Arc::clone(&cache),
             queue: Arc::clone(&queue),
@@ -734,6 +751,8 @@ pub fn run() {
             cmd_get_log_level,
             cmd_set_log_level,
             cmd_write_frontend_log,
+            cmd_get_system_clipboard_files,
+            cmd_set_system_clipboard_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

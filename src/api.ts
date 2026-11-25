@@ -382,4 +382,46 @@ export async function apiWriteFrontendLog(
   });
 }
 
+export interface SystemClipboardFilesResult {
+  paths: string[];
+  is_cut: boolean;
+}
+
+export async function apiGetSystemClipboardFiles(): Promise<SystemClipboardFilesResult | null> {
+  if (!isTauriRuntime()) return null;
+  return invoke<SystemClipboardFilesResult | null>("cmd_get_system_clipboard_files");
+}
+
+export async function apiSetSystemClipboardFiles(
+  paths: string[],
+  isCut: boolean
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+  return invoke<void>("cmd_set_system_clipboard_files", {
+    paths,
+    isCut,
+  });
+}
+
+const TRANSPARENT_DRAG_ICON =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
+export async function apiStartNativeDrag(
+  paths: string[],
+  isCut = false
+): Promise<void> {
+  if (!isTauriRuntime() || paths.length === 0) return;
+  try {
+    const { startDrag } = await import("@crabnebula/tauri-plugin-drag");
+    await startDrag({
+      item: paths,
+      icon: TRANSPARENT_DRAG_ICON,
+      mode: isCut ? "move" : "copy",
+    });
+  } catch (err) {
+    console.error("apiStartNativeDrag error:", err);
+  }
+}
+
+
 
