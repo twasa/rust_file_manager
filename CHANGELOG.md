@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-25
+
+### Added
+- **微核心外掛預覽架構 (Micro-kernel Plugin Architecture)** (`src/plugins/`)：
+  - 設計高內聚、鬆耦合之外掛擴充登錄系統 (`PluginRegistry`)，支援自訂多媒體與特殊檔案格式預覽器擴充。
+  - 實作「外掛功能管理」設定介面，提供熱插拔啟用/停用各預覽器外掛。
+- **豐富多媒體與程式碼預覽器 (Built-in Preview Plugins)**：
+  - **圖片與向量圖預覽器 (`ImagePreviewPlugin`)**：支援 PNG, JPG, WebP, GIF, SVG, BMP 縮放檢視 (Fit / Zoom In / Zoom Out) 與原始解析度資訊。
+  - **音訊與影片原生播放器 (`MediaPreviewPlugin`)**：支援 MP4, WebM, MP3, WAV, OGG 等媒體原生播放，並提供非原生或特殊編碼之容錯提示與一鍵外部預設程式開啟。
+  - **Markdown 文件美化渲染器 (`MarkdownPreviewPlugin`)**：支援標題階層、程式碼區塊、核取清單與行數/字數統計。
+  - **程式碼語法高亮檢視器 (`CodePreviewPlugin`)**：支援行號標註、一鍵複製程式碼與大檔案分段讀取。
+- **高效能大檔案分段載入與串流預覽機制**：
+  - 後端新增 `cmd_read_file_chunk` 指令，支援按指定 offset 與長度讀取二進位資料。
+  - 預覽設定提供自訂預覽檔案大小上限（預設調整為 5MB），並支援超過上限時「分段載入更多 (Load more chunk)」功能。
+
+### Fixed
+- **修復 Tauri 2.x 下 Asset Protocol 預覽圖片與影音 403 Forbidden 失敗問題**：
+  - 於 `tauri.conf.json` 配置 `app.security.assetProtocol.enable = true` 與萬用 scope，允許安全存取本機多媒體資源。
+  - 調整 CSP 支援 `asset: http://asset.localhost https://asset.localhost` 圖片與媒體來源。
+  - 圖片與影音播放器新增 `onError` 容錯防護卡片，遇特殊編碼或無法播放時引導使用者一鍵以系統預設應用程式開啟。
+
 ## [0.1.4] - 2026-11-24
 
 ### Added

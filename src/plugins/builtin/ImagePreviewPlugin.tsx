@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ZoomIn, ZoomOut, Maximize2, RotateCcw, CopyCheck } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, RotateCcw, CopyCheck, AlertCircle, ExternalLink } from "lucide-react";
+import { apiOpenItem } from "../../api";
 import { formatBytes } from "../../utils/formatters";
 import type { PreviewPlugin, PreviewPluginProps } from "../types";
 
@@ -14,6 +15,11 @@ export const ImagePreviewComponent: React.FC<PreviewPluginProps> = ({
     width: number;
     height: number;
   } | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    setLoadError(false);
+  }, [entry.path]);
 
   const imgSrc = convertFileSrc(entry.path);
 
@@ -91,30 +97,56 @@ export const ImagePreviewComponent: React.FC<PreviewPluginProps> = ({
 
       {/* 圖片預覽畫布 */}
       <div className="flex-1 overflow-auto flex items-center justify-center p-4 min-h-0 bg-slate-950/90 relative">
-        <div
-          className="relative transition-transform duration-100 ease-out flex items-center justify-center"
-          style={{
-            transform: fit ? "none" : `scale(${zoom})`,
-            transformOrigin: "center center",
-          }}
-        >
-          <img
-            src={imgSrc}
-            alt={entry.name}
-            onLoad={(e) => {
-              const img = e.currentTarget;
-              setDimensions({
-                width: img.naturalWidth,
-                height: img.naturalHeight,
-              });
+        {loadError ? (
+          <div className="flex flex-col items-center justify-center text-center p-6 max-w-md bg-slate-900/80 rounded-xl border border-slate-800 text-slate-300 gap-3">
+            <AlertCircle size={32} className="text-amber-400" />
+            <div className="text-sm font-semibold text-slate-200">無法預覽此圖片</div>
+            <div className="text-xs text-slate-400 leading-relaxed">
+              此格式可能包含特殊色彩配置、編碼或受系統環境限制。您可以嘗試使用作業系統預設的圖片檢視器開啟此檔案。
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await apiOpenItem(entry.path);
+                  onNotify("已使用系統預設程式開啟");
+                } catch {
+                  onNotify("無法開啟此檔案");
+                }
+              }}
+              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm"
+            >
+              <ExternalLink size={13} />
+              以系統預設程式開啟
+            </button>
+          </div>
+        ) : (
+          <div
+            className="relative transition-transform duration-100 ease-out flex items-center justify-center"
+            style={{
+              transform: fit ? "none" : `scale(${zoom})`,
+              transformOrigin: "center center",
             }}
-            className={
-              fit
-                ? "max-w-full max-h-[60vh] object-contain rounded shadow-lg select-none pointer-events-none"
-                : "max-w-none rounded shadow-lg select-none pointer-events-none"
-            }
-          />
-        </div>
+          >
+            <img
+              src={imgSrc}
+              alt={entry.name}
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                setDimensions({
+                  width: img.naturalWidth,
+                  height: img.naturalHeight,
+                });
+              }}
+              onError={() => setLoadError(true)}
+              className={
+                fit
+                  ? "max-w-full max-h-[60vh] object-contain rounded shadow-lg select-none pointer-events-none"
+                  : "max-w-none rounded shadow-lg select-none pointer-events-none"
+              }
+            />
+          </div>
+        )}
       </div>
     </div>
   );
