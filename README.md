@@ -53,7 +53,25 @@
 - **檔案雜湊校驗碼分頁 (Checksums)**：針對單一檔案提供一鍵計算 **MD5**、**SHA-256**、**CRC32** 完整性校驗碼，並支援獨立一鍵複製與耗時統計。
 - **底部快捷工具列**：視窗底部內建「在檔案總管顯示」、「開啟終端機」與「以預設程式開啟」等原生捷徑按鈕。
 
-### 7. 自定義鍵盤快速鍵（預設相容 MS Windows 習慣）
+### 7. 微核心外掛架構 (Plugin Architecture) 與豐富內容預覽面板 (`src/plugins/` & `src/components/PreviewPanel.tsx`)
+- **微核心隨選載入 (Micro-Kernel Plugin Architecture)**：
+  - 各預覽模組遵循標準 `PreviewPlugin` 介面，透過 `PluginRegistry` 統一調度，結合 Vite 與 React 隨選程式碼分割（Code-Splitting）。
+  - **設定中可自訂啟用/停用**：於「設定 -> 外掛功能管理」中，可自由切換各預覽外掛開關，停用之外掛零載入、零記憶體佔用。
+- **首波四大豐富預覽外掛**：
+  - **圖片與向量圖預覽器 (`builtin.image`)**：支援 PNG, JPG, JPEG, WebP, GIF, SVG, BMP, ICO 等縮圖預覽、自適應 Fit / 原始尺寸縮放、即時解析度（寬×高 px）與檔案大小顯示。
+  - **音訊與影片原生播放器 (`builtin.media`)**：支援 MP3, WAV, OGG, FLAC, MP4, WebM 等原生多媒體播放器、播放/暫停、時間進度條與音量調節。
+  - **Markdown 格式化排版外掛 (`builtin.markdown`)**：支援 Markdown 即時結構排版（標題、粗斜體、引用、清單、GFM 規範表格）、原始碼 (Raw) 與排版視圖一鍵切換、全文一鍵複製。
+  - **原始碼與文字高亮預覽器 (`builtin.code`)**：支援常見程式語言（Rust, TS, JS, Python, JSON, CSS, Shell 等）行號對齊顯示、關鍵字語法上色與全文一鍵複製。
+- **大檔案防崩潰與分頁動態載入 (Dynamic Paging & Load More)**：
+  - 初始預覽安全載入 64 KB 內容，確保 UI 零延遲秒開。
+  - 超出安全上限時，底部呈現「載入後續內容 (Load More)」按鈕，動態分段串接，徹底杜絕巨型文字檔撐爆 DOM。
+- **滑鼠拖曳自訂寬度 (Resizable Splitter)**：
+  - 預覽面板左邊緣內建拖曳手把，可即時拖曳調整寬度（`260px ~ 800px`），並自動持久化儲存至 `settings.json`。
+- **多選項目統計總覽 (Multi-selection Summary)**：
+  - 選取多個檔案時，預覽面板自動切換為多選統計視圖（項目總數、累計容量、檔案/資料夾數與各類型分佈徽章）。
+  - 內建「開啟進階批次重新命名」、「複製所有項目完整路徑」與「複製所有項目檔案名稱」快捷動作。
+
+### 8. 自定義鍵盤快速鍵（預設相容 MS Windows 習慣）
 內建按鍵錄製器，可自由修改所有快捷鍵並隨時一鍵還原預設值：
 
 | 功能動作 | 預設快捷鍵 (Windows 標準) | 說明 |
@@ -74,7 +92,7 @@
 | **返回上一層目錄** | `Backspace` | 導覽至父目錄 |
 | **在目前目錄開啟終端機** | `` Ctrl+` `` | 啟動 PowerShell 7 / Windows Terminal / macOS & Linux Terminal |
 
-### 8. 高效操作性：鍵盤游標移動導覽 (Keyboard Navigation)、打字自動跳轉 (Type-to-Select) 與滑鼠框選多檔案 (Marquee Selection) (`src/components/FilePane.tsx`)
+### 9. 高效操作性：鍵盤游標移動導覽 (Keyboard Navigation)、打字自動跳轉 (Type-to-Select) 與滑鼠框選多檔案 (Marquee Selection) (`src/components/FilePane.tsx`)
 - **鍵盤游標移動導航 (Keyboard Arrow Navigation)** (`src/utils/keyboardNavigation.ts` & `src/components/FilePane.tsx`)：
   - **上下方向鍵移動游標**：按 `ArrowUp` 與 `ArrowDown` 正確移動檔案焦點與選取游標，徹底攔截瀏覽器原生網頁滾動預設行為（不再像滑鼠滾輪般單純滾動畫面）。
   - **視窗自動捲動至焦點**：游標移動時若接近或超出可視畫面，自動透過 `@tanstack/react-virtual` 將目標檔案捲入可視區內。
@@ -96,7 +114,7 @@
   - **O(1) 高效幾何相交計算**：結合 `@tanstack/react-virtual` 虛擬滾動的高度區間與幾何座標比對，無論數百或數萬個檔案皆極速判定。
   - **邊界自動平滑捲動**：當框選游標拖曳接近面板頂部或底部邊界（$\le 30\text{px}$）時，清單自動平滑向上/向下捲動，支援跨畫面大範圍框選。
 
-### 9. 拖拉功能 (Drag & Drop)
+### 10. 拖拉功能 (Drag & Drop)
 - 支援將單一或多個選取項目直接拖拉至：
   1. 同一列表中的**子資料夾**
   2. 雙欄並排模式下的**另一側面板**
@@ -104,26 +122,26 @@
   4. 左側邊欄的**書籤捷徑**或**磁碟掛載點**
 - 拖拉放開時若按住 `Ctrl` 鍵會自動轉為「複製佇列」，未按則預設為「搬移佇列」。
 
-### 10. 進階批次檔案重新命名工具 (`src-tauri/src/batch_rename.rs`)
+### 11. 進階批次檔案重新命名工具 (`src-tauri/src/batch_rename.rs`)
 - **尋找與取代**：支援一般字串與正規表示式（Regex 擷取群組 `$1`, `$2`）及大小寫區分設定。
 - **動態變數支援**：支援在取代欄、前綴或後綴插入 `{date}`（當日 `YYYYMMDD`）、`{name}`（原主檔名）、`{ext}`（原副檔名）。
 - **大小寫與副檔名轉換**：一鍵轉全小寫 (`lowercase`)、全大寫 (`UPPERCASE`)、首字大寫 (`Title Case`) 或統一覆寫副檔名。
 - **自動流水號編碼**：可自訂起始數字、遞增步長、補零位數（如 `001`, `002`）與插入位置（開頭、末端或完全取代主檔名）。
 - **即時預覽、衝突檢查與兩階段原子更名 + 一鍵復原 (Undo)**：執行前即時標示同名衝突；執行時採用兩階段暫存更名避免連號檔案互撞，並在完成後於頂部工具列提供「復原批次改名」按鈕。
 
-### 11. 完整儲存裝置支援與磁碟代號排序 (`src-tauri/src/fs_ops.rs` & `src/components/Sidebar.tsx`)
+### 12. 完整儲存裝置支援與磁碟代號排序 (`src-tauri/src/fs_ops.rs` & `src/components/Sidebar.tsx`)
 - **支援 RAMDisk / ImDisk / Google Drive 雲端硬碟 / 網路磁碟機**：除了標準實體磁碟外，Windows 後端結合 Win32 API (`GetLogicalDrives`、`GetVolumeInformationW`、`GetDiskFreeSpaceExW`) 自動補齊所有邏輯掛載磁碟（如 ImDisk RAMDisk `R:`、Google 雲端硬碟 `G:` 與網路磁碟）。
 - **依磁碟代號字母嚴格排序**：側邊欄儲存空間統一採用 `代號: (磁碟標籤)` 格式（如 `C: (本機磁碟)`、`D: (D)`、`G: (Google Drive)`、`R: (RamDisk)`），並依磁碟字母由小到大整齊排列。
 
-### 12. 資訊安全防護設計 (Security Architecture)
+### 13. 資訊安全防護設計 (Security Architecture)
 - **嚴格內容安全政策 (Strict CSP)**：於 `src-tauri/tauri.conf.json` 啟用 `default-src 'self'; script-src 'self'` 等白名單限制，防止 WebView 載入或執行任何外部未知腳本。
 - **壓縮檔解壓縮 Zip Slip 路徑穿越防護 (`src-tauri/src/system_ops.rs`)**：解壓縮前先透過 `validate_archive_entries_list` 預檢壓縮檔內部清單，一旦發現包含 `../`、`..\`、絕對路徑（`/`、`C:\`）即自動攔截並拒絕解壓縮。
 - **檔名安全驗證與保留設備名攔截 (`validate_safe_entry_name`)**：於建立檔案/目錄、原地改名與批次重新命名中，統一攔截路徑跳脫字元（`..`、`/`、`\`、`:`、`\0`）與系統保留設備名（`CON`、`PRN`、`AUX`、`NUL`、`COM1~9`、`LPT1~9`）。
 - **防止目錄遞迴自我複製/搬移炸彈 (`src-tauri/src/queue.rs`)**：佇列執行前強制檢查目標路徑是否為來源目錄之子孫目錄，並於取消任務時自動清除未寫完的殘留檔案。
 - **子行程陣列傳參防範命令注入 (Command Injection Prevention)**：所有外部行程呼叫（`wt`、`pwsh`、`explorer`、`tar`）一律透過 `Command::new().args([...])` 陣列傳遞，不經過 Shell 字串拼接。
-- **設定檔讀寫副檔名與容量保護 (`src-tauri/src/lib.rs`)**：強制限制設定檔讀寫路徑必須為 `.json` 副檔名且不超過 `5 MB`，並於預覽面板限制最多讀取前 `32 KB`，防止任意系統檔案覆寫或大檔記憶體耗盡 (OOM)。
+- **設定檔讀寫副檔名與容量保護 (`src-tauri/src/lib.rs`)**：強制限制設定檔讀寫路徑必須為 `.json` 副檔名且不超過 `5 MB`，並於預覽面板限制最多讀取前 `64 KB`，防止任意系統檔案覆寫或大檔記憶體耗盡 (OOM)。
 
-### 13. 結構化 JSON 日誌與設定檔損毀診斷 (`src-tauri/src/logger.rs`)
+### 14. 結構化 JSON 日誌與設定檔損毀診斷 (`src-tauri/src/logger.rs`)
 - **同層日誌目錄與 JSON Lines (`.jsonl`) 現代化格式**：日誌目錄 `logs/` 預設直接建立於執行檔同層，以單行 JSON (`timestamp`, `level`, `target`, `event`, `message`, `context`, `pid`, `os`) 寫入 `logs/rfm.jsonl`（單檔上限 5 MB 自動輪替 Rotation），方便直接對接 `jq`、Grafana Loki、ELK 或 Datadog 進行收集與查詢，亦支援切換為 Plain Text 格式。
 - **預設 ERROR 日誌門檻等級 (Zero Noise)**：記錄門檻預設為 **`ERROR`**（僅記錄錯誤與 Panic，初次啟動與一般運作不產生多餘雜訊），使用者可隨時於設定中自由切換為 `DEBUG`、`INFO`、`WARN` 或 `ERROR`。
 - **全域 Panic Hook 與前端未捕獲錯誤攔截**：自動註冊 Rust `std::panic::set_hook` 以及前端 `window.onerror` / `unhandledrejection` 監聽器，任何異常皆會連同行號寫入日誌檔。
@@ -155,11 +173,19 @@ rust_file_manager/
 │   │   ├── DeleteConfirmModal.tsx # 檔案刪除/回收桶安全防呆確認對話框
 │   │   ├── FileEntryIcon.tsx     # 檔案類型彩色圖示組件
 │   │   ├── FilePane.tsx          # 虛擬滾動檔案面板 (@tanstack/react-virtual + 拖拉)
-│   │   ├── PreviewPanel.tsx      # 右側內容預覽與 MD5/SHA256/CRC32 雜湊校驗面板
+│   │   ├── PreviewPanel.tsx      # 可拖曳寬度預覽面板 (多選統計/微核心外掛調度/雜湊校驗)
 │   │   ├── QueueDrawer.tsx       # 底部背景非同步傳輸佇列進度抽屜
-│   │   ├── SettingsModal.tsx     # 字形/字體大小調整與自訂鍵盤快速鍵錄製器
+│   │   ├── SettingsModal.tsx     # 字體大小、自訂快捷鍵與外掛功能管理面板
 │   │   ├── Sidebar.tsx           # 跨平台磁碟空間、系統捷徑與書籤側邊欄
 │   │   └── TabBar.tsx            # 多色彩、可鎖定防關閉之分頁列
+│   ├── plugins/                  # 微核心外掛系統 (Micro-Kernel Plugin System)
+│   │   ├── builtin/              # 官方內建預覽外掛
+│   │   │   ├── ImagePreviewPlugin.tsx    # 圖片/SVG 縮放與解析度檢視
+│   │   │   ├── MediaPreviewPlugin.tsx    # 音訊/影片原生播放控制
+│   │   │   ├── MarkdownPreviewPlugin.tsx # Markdown 結構排版/Raw 切換
+│   │   │   └── CodePreviewPlugin.tsx     # 程式碼行號、關鍵字高亮與複製
+│   │   ├── registry.ts           # 插件註冊表與動態匹配調度中心
+│   │   └── types.ts              # 外掛介面標準規範 (PreviewPlugin)
 │   ├── store/
 │   │   └── useAppStore.ts        # Zustand 狀態管理與 localStorage 持久化
 │   ├── utils/

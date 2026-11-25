@@ -103,4 +103,40 @@ describe("useAppStore delete confirmation and settings", () => {
     const parsed = JSON.parse(json);
     expect(parsed.settings.fontSettings.uiFontSizePx).toBe(18);
   });
+
+  it("manages preview panel width and plugins config properly", () => {
+    const store = useAppStore.getState();
+    expect(store.previewPanelWidth).toBe(360);
+
+    // 測試寬度夾緊 (260 ~ 800)
+    store.setPreviewPanelWidth(200);
+    expect(useAppStore.getState().previewPanelWidth).toBe(260);
+
+    store.setPreviewPanelWidth(900);
+    expect(useAppStore.getState().previewPanelWidth).toBe(800);
+
+    store.setPreviewPanelWidth(450);
+    expect(useAppStore.getState().previewPanelWidth).toBe(450);
+
+    // 測試插件開關與匯出/匯入
+    store.setPluginEnabled("builtin.image", false);
+    expect(useAppStore.getState().pluginsConfig["builtin.image"]).toBe(false);
+
+    const exported = useAppStore.getState().exportConfigJson();
+    const parsed = JSON.parse(exported);
+    expect(parsed.settings.previewPanelWidth).toBe(450);
+    expect(parsed.settings.pluginsConfig["builtin.image"]).toBe(false);
+
+    // 匯入新設定
+    useAppStore.getState().importConfigJson(
+      JSON.stringify({
+        settings: {
+          previewPanelWidth: 520,
+          pluginsConfig: { "builtin.media": false },
+        },
+      })
+    );
+    expect(useAppStore.getState().previewPanelWidth).toBe(520);
+    expect(useAppStore.getState().pluginsConfig["builtin.media"]).toBe(false);
+  });
 });

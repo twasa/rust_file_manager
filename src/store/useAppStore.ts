@@ -230,6 +230,8 @@ interface AppStoreState {
   dualPaneEnabled: boolean;
   showHiddenFiles: boolean;
   showPreviewPanel: boolean;
+  previewPanelWidth: number;
+  pluginsConfig: Record<string, boolean>;
   showQueueDrawer: boolean;
   conflictStrategy: ConflictStrategy;
   queueRetention: QueueRetentionPolicy;
@@ -253,6 +255,8 @@ interface AppStoreState {
   setDualPaneEnabled: (enabled: boolean) => void;
   setShowHiddenFiles: (show: boolean) => void;
   setShowPreviewPanel: (show: boolean) => void;
+  setPreviewPanelWidth: (width: number) => void;
+  setPluginEnabled: (pluginId: string, enabled: boolean) => void;
   setShowQueueDrawer: (show: boolean) => void;
   setConflictStrategy: (strategy: ConflictStrategy) => void;
   updateQueueRetention: (partial: Partial<QueueRetentionPolicy>) => void;
@@ -309,6 +313,8 @@ export const useAppStore = create<AppStoreState>()(
       dualPaneEnabled: false,
       showHiddenFiles: false,
       showPreviewPanel: true,
+      previewPanelWidth: 360,
+      pluginsConfig: {},
       showQueueDrawer: false,
       conflictStrategy: "ask",
       queueRetention: {
@@ -353,6 +359,12 @@ export const useAppStore = create<AppStoreState>()(
         })),
       setShowHiddenFiles: (show) => set({ showHiddenFiles: show }),
       setShowPreviewPanel: (show) => set({ showPreviewPanel: show }),
+      setPreviewPanelWidth: (width) =>
+        set({ previewPanelWidth: Math.max(260, Math.min(800, width)) }),
+      setPluginEnabled: (pluginId, enabled) =>
+        set((state) => ({
+          pluginsConfig: { ...state.pluginsConfig, [pluginId]: enabled },
+        })),
       setShowQueueDrawer: (show) => set({ showQueueDrawer: show }),
       setConflictStrategy: (strategy) => set({ conflictStrategy: strategy }),
       updateQueueRetention: (partial) =>
@@ -390,6 +402,8 @@ export const useAppStore = create<AppStoreState>()(
           dualPaneEnabled: false,
           showHiddenFiles: false,
           showPreviewPanel: true,
+          previewPanelWidth: 360,
+          pluginsConfig: {},
           confirmDelete: true,
           pendingConflictPrompt: null,
           pendingDeletePrompt: null,
@@ -797,6 +811,8 @@ export const useAppStore = create<AppStoreState>()(
             dualPaneEnabled: state.dualPaneEnabled,
             showHiddenFiles: state.showHiddenFiles,
             showPreviewPanel: state.showPreviewPanel,
+            previewPanelWidth: state.previewPanelWidth,
+            pluginsConfig: state.pluginsConfig,
             confirmDelete: state.confirmDelete,
             conflictStrategy: state.conflictStrategy,
             queueRetention: state.queueRetention,
@@ -830,6 +846,16 @@ export const useAppStore = create<AppStoreState>()(
             typeof cfg.showPreviewPanel === "boolean"
               ? cfg.showPreviewPanel
               : state.showPreviewPanel,
+          previewPanelWidth:
+            typeof cfg.previewPanelWidth === "number" &&
+            cfg.previewPanelWidth >= 260 &&
+            cfg.previewPanelWidth <= 800
+              ? cfg.previewPanelWidth
+              : state.previewPanelWidth,
+          pluginsConfig:
+            cfg.pluginsConfig && typeof cfg.pluginsConfig === "object"
+              ? { ...state.pluginsConfig, ...cfg.pluginsConfig }
+              : state.pluginsConfig,
           confirmDelete:
             typeof cfg.confirmDelete === "boolean"
               ? cfg.confirmDelete
@@ -935,6 +961,8 @@ export const useAppStore = create<AppStoreState>()(
         dualPaneEnabled: state.dualPaneEnabled,
         showHiddenFiles: state.showHiddenFiles,
         showPreviewPanel: state.showPreviewPanel,
+        previewPanelWidth: state.previewPanelWidth,
+        pluginsConfig: state.pluginsConfig,
         confirmDelete: state.confirmDelete,
         conflictStrategy: state.conflictStrategy,
         queueRetention: state.queueRetention,

@@ -7,6 +7,7 @@ import type {
   DirStats,
   DirectoryListing,
   FileChecksumResult,
+  FileChunkData,
   FilePreviewData,
   ItemDetailedInfo,
   LogFormat,
@@ -78,6 +79,25 @@ export async function apiReadDirectory(
 
 export async function apiReadFilePreview(path: string): Promise<FilePreviewData> {
   return invoke<FilePreviewData>("cmd_read_file_preview", { path });
+}
+
+export async function apiReadFileChunk(
+  path: string,
+  offset: number,
+  length: number
+): Promise<FileChunkData> {
+  if (!isTauriRuntime()) {
+    return {
+      path,
+      offset,
+      bytesRead: 0,
+      totalSize: 0,
+      content: "",
+      isBinary: false,
+      hasMore: false,
+    };
+  }
+  return invoke<FileChunkData>("cmd_read_file_chunk", { path, offset, length });
 }
 
 export async function apiGetItemDetailedInfo(

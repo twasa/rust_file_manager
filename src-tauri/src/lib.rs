@@ -8,7 +8,7 @@ pub mod system_ops;
 use batch_rename::{execute_batch_rename, preview_batch_rename, undo_batch_rename};
 use fs_ops::{
     calculate_dir_stats, calculate_multi_item_stats, get_item_detailed_info, get_system_locations,
-    read_directory_cached, read_file_preview, FsCacheState,
+    read_directory_cached, read_file_chunk, read_file_preview, FsCacheState,
 };
 use logger::{
     diagnose_config_value, resolve_app_directory, resolve_log_directory, AppLogger, LogFormat,
@@ -16,9 +16,9 @@ use logger::{
 };
 use models::{
     normalize_path_str, BatchRenameExecutionResult, BatchRenamePreviewItem, BatchRenameRule,
-    ConflictStrategy, DirStats, DirectoryListing, FileChecksumResult, FilePreviewData,
-    ItemDetailedInfo, QueueRetentionPolicy, SystemLocations, TransferConflictItem,
-    TransferJobSnapshot, TransferJobType,
+    ConflictStrategy, DirStats, DirectoryListing, FileChecksumResult, FileChunkData,
+    FilePreviewData, ItemDetailedInfo, QueueRetentionPolicy, SystemLocations,
+    TransferConflictItem, TransferJobSnapshot, TransferJobType,
 };
 use queue::QueueManager;
 use serde_json::{json, Value};
@@ -60,6 +60,17 @@ async fn cmd_read_directory(
 #[tauri::command]
 async fn cmd_read_file_preview(path: String) -> Result<FilePreviewData, String> {
     tokio::task::spawn_blocking(move || read_file_preview(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn cmd_read_file_chunk(
+    path: String,
+    offset: u64,
+    length: usize,
+) -> Result<FileChunkData, String> {
+    tokio::task::spawn_blocking(move || read_file_chunk(&path, offset, length))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -686,6 +697,7 @@ pub fn run() {
             cmd_get_system_locations,
             cmd_read_directory,
             cmd_read_file_preview,
+            cmd_read_file_chunk,
             cmd_get_item_detailed_info,
             cmd_calculate_dir_stats,
             cmd_calculate_multi_item_stats,
