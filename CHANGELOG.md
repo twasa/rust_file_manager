@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-26
+
 ### Added
 - **作業系統級系統剪貼簿雙向互通 (System Native Clipboard Integration)** (`src-tauri/src/clipboard_ops.rs` & `src/api.ts` & `src/App.tsx`)：
   - **檔案總管複製 ➔ 本管理器貼上**：從外部 Windows 檔案總管、macOS Finder、Linux Nautilus 複製或剪下實體檔案，切換至本管理器按 `Ctrl+V` 可直接解析作業系統剪貼簿（Windows `CF_HDROP`、`Preferred DropEffect`）並加入傳輸佇列執行。
@@ -15,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **作業系統級雙向拖曳功能 (System Native Drag & Drop)** (`tauri-plugin-drag` & `src/components/FilePane.tsx` & `src/App.tsx`)：
   - **原生檔案拖出至外部應用程式 (Native Drag Out)**：整合作業系統底層拖曳協定，支援直接將音樂、影片或各類檔案由本管理器**拖曳至外部播放器（如 VLC、PotPlayer、Spotify）、瀏覽器或各類修圖軟體**，由外部程式直接解析並開啟播放。
   - **外部檔案拖入應用程式 (Native Drag In)**：啟用 Tauri 2 原生 `dragDropEnabled` 與 `onDragDropEvent`，支援將外部視窗或桌面之實體檔案拖入特定子資料夾、分頁標籤、側邊欄書籤/磁碟區或目前列表面板，跨 Windows、Linux、macOS 全平台相容。
+
+### Fixed
+- **修復檔案向外拖拉至 Windows 檔案總管複製失效問題** (`src/components/FilePane.tsx` & `src/api.ts`)：
+  - 在 `onDragStart` 調用 `e.preventDefault()` 阻止瀏覽器預設 HTML5 拖拉行為，杜絕 Chromium 內部文字拖拉搶佔滑鼠捕獲，由作業系統原生 OLE `DoDragDrop` 管線全權接管。
+  - 靜態引入 `startDrag` 消除動態模組載入之微任務延遲，並將傳入之檔案路徑自動轉換為標準 Windows 原生反斜線格式（`D:\...`）。
+  - 在 `App.tsx` 補強父目錄比對防呆，避免在相同目錄內意外拖放造成重複自拷貝。
+- **建置發布指令碼防呆與磁碟前置健康檢查** (`scripts/build-release.ps1`)：
+  - 補足相依套件完整性檢驗，若缺漏 `@crabnebula/tauri-plugin-drag` 自動觸發離線優先的 `npm install`。
+  - 加入磁碟空間前置健康檢查與建置診斷資訊輸出。
 
 ## [0.2.0] - 2026-11-25
 

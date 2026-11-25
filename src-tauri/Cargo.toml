@@ -1,6 +1,6 @@
 [package]
 name = "rust-file-manager"
-version = "0.2.0"
+version = "0.2.1"
 description = "Cross-platform High-Performance File Manager built with Rust and Tauri 2.x"
 authors = ["William Wang <5100752+twasa@users.noreply.github.com>"]
 edition = "2021"
