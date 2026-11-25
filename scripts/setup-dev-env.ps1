@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Rust File Manager (Tauri 2.x) 跨平台開發環境自動化安裝腳本 (PowerShell 7+ 支援 Windows / Linux / macOS)
 
@@ -98,6 +98,17 @@ if ($CheckOnly) {
             Write-Warn ("{0,-8} : 尚未安裝" -f $cmd)
         }
     }
+    try {
+        $rootDrive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot([System.IO.Path]::GetFullPath($ProjectRoot)))
+        $freeGb = [math]::Round($rootDrive.AvailableFreeSpace / 1GB, 2)
+        if ($freeGb -lt 2.0) {
+            Write-Warn ("{0,-8} : 磁區 {1} 空間嚴重不足 (僅剩 {2} GB，建議預留 5~10 GB)" -f "disk", $rootDrive.Name, $freeGb)
+        } elseif ($freeGb -lt 5.0) {
+            Write-Warn ("{0,-8} : 磁區 {1} 空間偏低 (僅剩 {2} GB，建議預留 5~10 GB)" -f "disk", $rootDrive.Name, $freeGb)
+        } else {
+            Write-Ok ("{0,-8} : 磁區 {1} 可用空間 {2} GB" -f "disk", $rootDrive.Name, $freeGb)
+        }
+    } catch {}
     exit 0
 }
 
