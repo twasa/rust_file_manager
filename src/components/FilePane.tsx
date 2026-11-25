@@ -29,6 +29,7 @@ import {
   apiOpenItem,
   apiReadDirectory,
   apiRenameItem,
+  apiStartNativeDrag,
 } from "../api";
 import { useAppStore } from "../store/useAppStore";
 import { formatBytes, formatDateTime, keyboardEventToCombo } from "../utils/formatters";
@@ -1154,6 +1155,8 @@ export const FilePane: React.FC<FilePaneProps> = ({
       {/* 檔案列表主視窗 (Virtual Scrolling + Drag & Drop + Context Menu) */}
       <div
         ref={parentRef}
+        data-pane-id={pane}
+        data-pane-dir={activeTab?.path}
         onMouseDown={handleContainerMouseDown}
         onClick={() => {
           clearTypeAhead();
@@ -1208,6 +1211,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
                   key={entry.path}
                   data-file-grid-card="true"
                   data-grid-item-path={entry.path}
+                  data-drop-folder-path={entry.isDir ? entry.path : undefined}
                   draggable={!isRenaming}
                   onDragStart={(e) => {
                     e.stopPropagation();
@@ -1216,6 +1220,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
                       : [entry.path];
                     setDragPayload({ sourcePane: pane, paths });
                     e.dataTransfer.setData("text/plain", paths.join("\n"));
+                    apiStartNativeDrag(paths, false);
                   }}
                   onDragOver={(e) => {
                     if (entry.isDir) {
@@ -1308,6 +1313,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
                   key={entry.path}
                   data-file-row="true"
                   data-file-row-path={entry.path}
+                  data-drop-folder-path={entry.isDir ? entry.path : undefined}
                   draggable={!isRenaming}
                   onDragStart={(e) => {
                     e.stopPropagation();
@@ -1316,6 +1322,7 @@ export const FilePane: React.FC<FilePaneProps> = ({
                       : [entry.path];
                     setDragPayload({ sourcePane: pane, paths });
                     e.dataTransfer.setData("text/plain", paths.join("\n"));
+                    apiStartNativeDrag(paths, false);
                   }}
                   onDragOver={(e) => {
                     if (entry.isDir) {

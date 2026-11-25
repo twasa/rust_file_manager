@@ -54,6 +54,7 @@ export const TabBar: React.FC<TabBarProps> = ({ pane, onDropFilesToTab }) => {
           return (
             <div
               key={tab.id}
+              data-tab-path={tab.path}
               draggable
               onDragStart={(e) => {
                 e.stopPropagation();

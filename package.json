@@ -16,6 +16,7 @@
     "package:all": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-release.ps1"
   },
   "dependencies": {
+    "@crabnebula/tauri-plugin-drag": "^2.1.0",
     "@tanstack/react-virtual": "^3.13.0",
     "@tauri-apps/api": "^2.2.0",
     "clsx": "^2.1.1",

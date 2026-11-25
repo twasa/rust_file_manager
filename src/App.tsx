@@ -26,6 +26,8 @@ import {
   apiEnqueueTransfer,
   apiExtractArchive,
   apiGetSystemLocations,
+  apiGetSystemClipboardFiles,
+  apiSetSystemClipboardFiles,
   apiListTransferJobs,
   apiLoadConfigFile,
   apiOpenItem,
@@ -36,6 +38,7 @@ import {
   apiSetQueueRetention,
   apiUndoBatchRename,
   apiWriteFrontendLog,
+  isTauriRuntime,
 } from "./api";
 import {
   useAppStore,
@@ -308,25 +311,48 @@ export const App: React.FC = () => {
     currentTab?.selectedPaths.includes(e.path)
   );
 
-  // 執行佇列貼上（若衝突策略為 ask 且有同名檔案，先彈出互動詢問對話框）
+  // 執行佇列貼上（優先讀取系統剪貼簿，若衝突策略為 ask 且有同名檔案，先彈出互動詢問對話框）
   const executePasteToDir = useCallback(
     async (targetDirPath: string) => {
-      if (!clipboard || clipboard.paths.length === 0) return;
-      const jobType = clipboard.mode === "cut" ? "move" : "copy";
+      let sources: string[] = [];
+      let jobType: "copy" | "move" = "copy";
+
+      // 1. 優先查詢系統剪貼簿 (支援 Windows / macOS / Linux 檔案總管外部複製)
+      try {
+        const sys = await apiGetSystemClipboardFiles();
+        if (sys && sys.paths.length > 0) {
+          sources = sys.paths;
+          jobType = sys.is_cut ? "move" : "copy";
+        }
+      } catch (err) {
+        console.error("apiGetSystemClipboardFiles failed:", err);
+      }
+
+      // 2. 若系統剪貼簿未包含檔案，回退使用內部 Zustand 剪貼簿
+      if (sources.length === 0 && clipboard && clipboard.paths.length > 0) {
+        sources = clipboard.paths;
+        jobType = clipboard.mode === "cut" ? "move" : "copy";
+      }
+
+      if (sources.length === 0) {
+        notify("剪貼簿中沒有可貼上的項目");
+        return;
+      }
+
       try {
         if (conflictStrategy === "ask") {
           const conflicts = await apiCheckTransferConflicts(
-            clipboard.paths,
+            sources,
             targetDirPath
           );
           if (conflicts.length > 0) {
-            const sources = [...clipboard.paths];
-            if (clipboard.mode === "cut") {
+            const pendingSources = [...sources];
+            if (jobType === "move") {
               setClipboard(null);
             }
             setPendingConflictPrompt({
               jobType,
-              sources,
+              sources: pendingSources,
               destination: targetDirPath,
               conflicts,
             });
@@ -335,18 +361,18 @@ export const App: React.FC = () => {
         }
         await apiEnqueueTransfer(
           jobType,
-          clipboard.paths,
+          sources,
           targetDirPath,
           conflictStrategy
         );
-        if (clipboard.mode === "cut") {
+        if (jobType === "move") {
           setClipboard(null);
         }
         setShowQueueDrawer(true);
         notify(
           `已加入背景佇列：${
             jobType === "move" ? "搬移" : "複製"
-          } ${clipboard.paths.length} 個項目`
+          } ${sources.length} 個項目`
         );
       } catch (err) {
         notify(`貼上失敗: ${String(err)}`);
@@ -361,6 +387,133 @@ export const App: React.FC = () => {
       setShowQueueDrawer,
     ]
   );
+
+  // 處理自外部拖入應用程式的實體檔案
+  const handleExternalDroppedFiles = useCallback(
+    async (sources: string[], targetDirPath: string) => {
+      const validSources = sources.filter((p) => p !== targetDirPath);
+      if (validSources.length === 0) return;
+
+      const jobType = "copy"; // 外部拖入預設為複製
+      try {
+        if (conflictStrategy === "ask") {
+          const conflicts = await apiCheckTransferConflicts(
+            validSources,
+            targetDirPath
+          );
+          if (conflicts.length > 0) {
+            setPendingConflictPrompt({
+              jobType,
+              sources: validSources,
+              destination: targetDirPath,
+              conflicts,
+            });
+            return;
+          }
+        }
+        await apiEnqueueTransfer(
+          jobType,
+          validSources,
+          targetDirPath,
+          conflictStrategy
+        );
+        setShowQueueDrawer(true);
+        notify(`已從外部拖入並加入傳輸佇列：${validSources.length} 個項目`);
+      } catch (err) {
+        notify(`外部檔案拖入失敗: ${String(err)}`);
+      }
+    },
+    [conflictStrategy, notify, setPendingConflictPrompt, setShowQueueDrawer]
+  );
+
+  const panesRef = useRef(panes);
+  panesRef.current = panes;
+  const activePaneRef = useRef(activePane);
+  activePaneRef.current = activePane;
+
+  // 監聽外部實體檔案拖入 (Tauri 2 原生 onDragDropEvent，跨 Windows / Linux / macOS)
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let unlistenFn: (() => void) | null = null;
+
+    async function registerNativeDragDrop() {
+      try {
+        const { getCurrentWebview } = await import("@tauri-apps/api/webview");
+        unlistenFn = await getCurrentWebview().onDragDropEvent((event) => {
+          if (event.payload.type === "drop") {
+            const droppedPaths = event.payload.paths;
+            if (!droppedPaths || droppedPaths.length === 0) return;
+
+            // 將實體像素轉為 CSS 邏輯像素
+            const clientX = event.payload.position.x / window.devicePixelRatio;
+            const clientY = event.payload.position.y / window.devicePixelRatio;
+            const targetEl = document.elementFromPoint(clientX, clientY);
+
+            // 1. 若落在特定資料夾或書籤/磁碟區
+            const dropFolderEl = targetEl?.closest("[data-drop-folder-path]");
+            const folderPath = dropFolderEl?.getAttribute("data-drop-folder-path");
+
+            // 2. 若落在特定分頁標籤
+            const tabEl = targetEl?.closest("[data-tab-path]");
+            const tabPath = tabEl?.getAttribute("data-tab-path");
+
+            // 3. 若落在特定面板內容區
+            const paneEl = targetEl?.closest("[data-pane-id]");
+            const paneId = paneEl?.getAttribute("data-pane-id") as "left" | "right" | null;
+
+            let targetDir: string | null = null;
+            if (folderPath) {
+              targetDir = folderPath;
+            } else if (tabPath) {
+              targetDir = tabPath;
+            } else if (paneId && panesRef.current[paneId]) {
+              const pState = panesRef.current[paneId];
+              const tab = pState.tabs.find((t) => t.id === pState.activeTabId);
+              targetDir = tab?.path || null;
+            } else {
+              const currentActive = activePaneRef.current;
+              const pState = panesRef.current[currentActive];
+              const tab = pState?.tabs.find((t) => t.id === pState.activeTabId);
+              targetDir = tab?.path || null;
+            }
+
+            if (targetDir) {
+              handleExternalDroppedFiles(droppedPaths, targetDir);
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Failed to register onDragDropEvent:", err);
+      }
+    }
+
+    registerNativeDragDrop();
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
+  }, [handleExternalDroppedFiles]);
+
+  // 視窗獲得焦點或載入時，同步檢查系統剪貼簿是否有複製的實體檔案
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    const syncSystemClipboard = async () => {
+      try {
+        const sys = await apiGetSystemClipboardFiles();
+        if (sys && sys.paths.length > 0) {
+          setClipboard({
+            mode: sys.is_cut ? "cut" : "copy",
+            paths: sys.paths,
+          });
+        }
+      } catch {}
+    };
+
+    window.addEventListener("focus", syncSystemClipboard);
+    syncSystemClipboard();
+    return () => {
+      window.removeEventListener("focus", syncSystemClipboard);
+    };
+  }, [setClipboard]);
 
   // 執行快捷鍵對應動作
   const executeShortcutAction = useCallback(
@@ -392,19 +545,23 @@ export const App: React.FC = () => {
         }
         case "copy_selected": {
           if (selectedEntries.length === 0) return;
+          const paths = selectedEntries.map((e) => e.path);
           setClipboard({
             mode: "copy",
-            paths: selectedEntries.map((e) => e.path),
+            paths,
           });
-          notify(`已複製 ${selectedEntries.length} 個項目至剪貼簿`);
+          apiSetSystemClipboardFiles(paths, false);
+          notify(`已複製 ${selectedEntries.length} 個項目至系統剪貼簿`);
           break;
         }
         case "cut_selected": {
           if (selectedEntries.length === 0) return;
+          const paths = selectedEntries.map((e) => e.path);
           setClipboard({
             mode: "cut",
-            paths: selectedEntries.map((e) => e.path),
+            paths,
           });
+          apiSetSystemClipboardFiles(paths, true);
           notify(`已剪下 ${selectedEntries.length} 個項目（貼上後將搬移）`);
           break;
         }
@@ -1095,7 +1252,16 @@ export const App: React.FC = () => {
               activePane === "left" ? inlineRenameTargetPath : null
             }
             onSetInlineRenameTarget={setInlineRenameTargetPath}
-            onOpenContextMenu={(e, p, entry, sel, dirPath) =>
+            onOpenContextMenu={async (e, p, entry, sel, dirPath) => {
+              try {
+                const sys = await apiGetSystemClipboardFiles();
+                if (sys && sys.paths.length > 0) {
+                  setClipboard({
+                    mode: sys.is_cut ? "cut" : "copy",
+                    paths: sys.paths,
+                  });
+                }
+              } catch {}
               setContextMenu({
                 visible: true,
                 x: e.clientX,
@@ -1104,8 +1270,8 @@ export const App: React.FC = () => {
                 targetEntry: entry,
                 selectedEntries: sel,
                 currentDirPath: dirPath,
-              })
-            }
+              });
+            }}
             onEntriesLoaded={handleEntriesLoaded}
             onNotify={notify}
           />
@@ -1118,7 +1284,16 @@ export const App: React.FC = () => {
                 activePane === "right" ? inlineRenameTargetPath : null
               }
               onSetInlineRenameTarget={setInlineRenameTargetPath}
-              onOpenContextMenu={(e, p, entry, sel, dirPath) =>
+              onOpenContextMenu={async (e, p, entry, sel, dirPath) => {
+                try {
+                  const sys = await apiGetSystemClipboardFiles();
+                  if (sys && sys.paths.length > 0) {
+                    setClipboard({
+                      mode: sys.is_cut ? "cut" : "copy",
+                      paths: sys.paths,
+                    });
+                  }
+                } catch {}
                 setContextMenu({
                   visible: true,
                   x: e.clientX,
@@ -1127,8 +1302,8 @@ export const App: React.FC = () => {
                   targetEntry: entry,
                   selectedEntries: sel,
                   currentDirPath: dirPath,
-                })
-              }
+                });
+              }}
               onEntriesLoaded={handleEntriesLoaded}
               onNotify={notify}
             />

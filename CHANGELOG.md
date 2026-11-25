@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **作業系統級系統剪貼簿雙向互通 (System Native Clipboard Integration)** (`src-tauri/src/clipboard_ops.rs` & `src/api.ts` & `src/App.tsx`)：
+  - **檔案總管複製 ➔ 本管理器貼上**：從外部 Windows 檔案總管、macOS Finder、Linux Nautilus 複製或剪下實體檔案，切換至本管理器按 `Ctrl+V` 可直接解析作業系統剪貼簿（Windows `CF_HDROP`、`Preferred DropEffect`）並加入傳輸佇列執行。
+  - **本管理器複製 ➔ 檔案總管貼上**：在列表按 `Ctrl+C` 複製或 `Ctrl+X` 剪下，自動封裝 `DROPFILES` 結構寫入全域系統剪貼簿，可於外部作業系統程式中無縫貼上。
+  - **即時剪貼簿狀態感知**：當視窗重新聚焦（`focus`）或觸發右鍵選單時自動同步系統剪貼簿狀態，確保工具列與選單上的「貼上」按鈕即時啟用。
+- **作業系統級雙向拖曳功能 (System Native Drag & Drop)** (`tauri-plugin-drag` & `src/components/FilePane.tsx` & `src/App.tsx`)：
+  - **原生檔案拖出至外部應用程式 (Native Drag Out)**：整合作業系統底層拖曳協定，支援直接將音樂、影片或各類檔案由本管理器**拖曳至外部播放器（如 VLC、PotPlayer、Spotify）、瀏覽器或各類修圖軟體**，由外部程式直接解析並開啟播放。
+  - **外部檔案拖入應用程式 (Native Drag In)**：啟用 Tauri 2 原生 `dragDropEnabled` 與 `onDragDropEvent`，支援將外部視窗或桌面之實體檔案拖入特定子資料夾、分頁標籤、側邊欄書籤/磁碟區或目前列表面板，跨 Windows、Linux、macOS 全平台相容。
+
 ## [0.2.0] - 2026-11-25
 
 ### Added
