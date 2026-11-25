@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Rust File Manager (Tauri 2.x) 跨平台單一執行檔 (Portable) 與安裝包 (Installer) 自動化打包腳本
 
@@ -41,6 +41,22 @@ foreach ($p in @($CargoBin, $FnmDefault)) {
     }
 }
 
+function Get-TargetDriveInfo([string]$Path) {
+    try {
+        $fullPath = [System.IO.Path]::GetFullPath($Path)
+        $root = [System.IO.Path]::GetPathRoot($fullPath)
+        $driveInfo = [System.IO.DriveInfo]::new($root)
+        return [PSCustomObject]@{
+            Root = $root
+            AvailableFreeBytes = $driveInfo.AvailableFreeSpace
+            TotalBytes = $driveInfo.TotalSize
+            AvailableFreeGB = [math]::Round($driveInfo.AvailableFreeSpace / 1GB, 2)
+        }
+    } catch {
+        return $null
+    }
+}
+
 # 確保本地 node_modules 與 Tauri CLI 存在，若不存在則自動執行 npm install
 $TauriCmd = Join-Path $ProjectRoot "node_modules/.bin/tauri.cmd"
 $TauriBin = Join-Path $ProjectRoot "node_modules/.bin/tauri"
@@ -54,6 +70,31 @@ if ((-not (Test-Path $TauriCmd)) -and (-not (Test-Path $TauriBin))) {
         }
     } finally {
         Pop-Location
+    }
+}
+
+$TargetBuildDir = if ($env:CARGO_TARGET_DIR) {
+    $env:CARGO_TARGET_DIR
+} else {
+    Join-Path $ProjectRoot "src-tauri/target"
+}
+
+# 磁碟空間前置健康檢查 (Pre-flight disk space check)
+$targetDrive = Get-TargetDriveInfo $TargetBuildDir
+if ($targetDrive) {
+    if ($targetDrive.AvailableFreeGB -lt 2.0) {
+        Write-Host "`n============================================================" -ForegroundColor Red
+        Write-Host "[ERROR] 編譯目標磁區 ($($targetDrive.Root)) 剩餘空間嚴重不足 (僅剩 $($targetDrive.AvailableFreeGB) GB)！" -ForegroundColor Red
+        Write-Host "[HINT]  Tauri / Rust Release 發行版編譯與 LTO 連結需要大量暫存空間，至少需 3~5 GB。" -ForegroundColor Yellow
+        Write-Host "[HINT]  為防寫入中斷 (rustc-LLVM no space on device)，請先採取以下措施：" -ForegroundColor Yellow
+        Write-Host "        1. 清理本專案快取: cd src-tauri; cargo clean" -ForegroundColor Yellow
+        Write-Host "        2. 或指定其他大容量磁區: `$env:CARGO_TARGET_DIR = 'F:\cargo_target'" -ForegroundColor Yellow
+        Write-Host "============================================================`n" -ForegroundColor Red
+        throw "磁碟空間不足 (剩餘 $($targetDrive.AvailableFreeGB) GB < 2.0 GB)，已中斷編譯以防寫入失敗。"
+    } elseif ($targetDrive.AvailableFreeGB -lt 5.0) {
+        Write-Host "[WARN]  編譯目標磁區 ($($targetDrive.Root)) 剩餘空間偏低 (僅剩 $($targetDrive.AvailableFreeGB) GB)，建議預留至少 5~10 GB 供發行版連結與符號檔產生。" -ForegroundColor Yellow
+    } else {
+        Write-Host "[INFO]  磁碟前置檢查正常：目標磁區 ($($targetDrive.Root)) 可用空間 $($targetDrive.AvailableFreeGB) GB" -ForegroundColor Cyan
     }
 }
 
@@ -72,8 +113,30 @@ try {
         npm run tauri -- build
     }
     if ($LASTEXITCODE -ne 0) {
+        $failedDrive = Get-TargetDriveInfo $TargetBuildDir
+        if ($failedDrive -and ($failedDrive.AvailableFreeGB -lt 1.0)) {
+            Write-Host "`n============================================================" -ForegroundColor Red
+            Write-Host "[CRITICAL] 偵測到編譯磁區 ($($failedDrive.Root)) 剩餘空間極低 (僅剩 $($failedDrive.AvailableFreeGB) GB)！" -ForegroundColor Red
+            Write-Host "[HINT]     本次編譯失敗極可能由磁碟空間耗盡 (no space on device) 引起。" -ForegroundColor Yellow
+            Write-Host "[HINT]     建議採取以下措施釋放空間或重定向快取：" -ForegroundColor Yellow
+            Write-Host "           1. 清理本專案快取: cd src-tauri; cargo clean" -ForegroundColor Yellow
+            Write-Host "           2. 或將編譯目錄指向更大容量之磁區: `$env:CARGO_TARGET_DIR = 'F:\cargo_target'" -ForegroundColor Yellow
+            Write-Host "============================================================`n" -ForegroundColor Red
+        }
         throw "Tauri build 失敗，退出碼: $LASTEXITCODE"
     }
+} catch {
+    $failedDrive = Get-TargetDriveInfo $TargetBuildDir
+    if ($failedDrive -and ($failedDrive.AvailableFreeGB -lt 1.0)) {
+        Write-Host "`n============================================================" -ForegroundColor Red
+        Write-Host "[CRITICAL] 偵測到編譯磁區 ($($failedDrive.Root)) 剩餘空間極低 (僅剩 $($failedDrive.AvailableFreeGB) GB)！" -ForegroundColor Red
+        Write-Host "[HINT]     本次編譯失敗極可能由磁碟空間耗盡 (no space on device) 引起。" -ForegroundColor Yellow
+        Write-Host "[HINT]     建議採取以下措施釋放空間或重定向快取：" -ForegroundColor Yellow
+        Write-Host "           1. 清理本專案快取: cd src-tauri; cargo clean" -ForegroundColor Yellow
+        Write-Host "           2. 或將編譯目錄指向更大容量之磁區: `$env:CARGO_TARGET_DIR = 'F:\cargo_target'" -ForegroundColor Yellow
+        Write-Host "============================================================`n" -ForegroundColor Red
+    }
+    throw
 } finally {
     Pop-Location
 }

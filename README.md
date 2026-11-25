@@ -285,7 +285,9 @@ Tauri 2.x 會將前端所有靜態資源（HTML / CSS / JS）直接嵌入編譯�
 
 #### 使用自動化打包腳本（自動匯出至 `release-artifacts/` 並產生 `SHA256SUMS.txt`）
 
-> **智慧依賴檢測**：打包腳本（`build-release.ps1` 與 `build-release.sh`）具備依賴防呆機制，若檢測到尚未安裝 `node_modules` 或本機 `@tauri-apps/cli`，將自動觸發 `npm install` 補齊依賴後再進行打包，避免乾淨環境下出現找不到可執行檔之錯誤。
+> **智慧依賴與磁碟防呆檢測**：打包腳本（`build-release.ps1` 與 `build-release.sh`）具備智慧檢核機制：
+> - **依賴防呆**：若檢測到尚未安裝 `node_modules` 或本機 `@tauri-apps/cli`，將自動觸發 `npm install` 補齊依賴後再進行打包。
+> - **磁碟空間守門 (Pre-flight Check)**：Release 發行版編譯與 LTO 連結需要大量暫存空間，編譯前自動檢查目標磁區可用空間（低於 2 GB 即刻阻斷防寫入失敗，低於 5 GB 發出黃字警告）；若不幸因磁碟耗盡中斷亦會自動印出友善清理建議與 `CARGO_TARGET_DIR` 重定向指引。
 
 **PowerShell (`pwsh`)**：
 ```powershell

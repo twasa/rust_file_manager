@@ -106,6 +106,13 @@ if [[ "${CHECK_ONLY}" -eq 1 ]]; then
   fnm --version   || log_warn "fnm 尚未安裝"
   node --version  || log_warn "node 尚未安裝"
   npm --version   || log_warn "npm 尚未安裝"
+  if command -v df >/dev/null 2>&1; then
+    free_kb=$(df -k "${PROJECT_ROOT}" 2>/dev/null | awk 'NR==2 {print $4}')
+    if [[ -n "${free_kb}" ]]; then
+      free_gb=$(awk "BEGIN {printf \"%.2f\", ${free_kb}/1048576}")
+      log_ok "disk     : 專案磁區可用空間 ${free_gb} GB"
+    fi
+  fi
   exit 0
 fi
 
