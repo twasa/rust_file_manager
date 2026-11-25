@@ -231,6 +231,7 @@ interface AppStoreState {
   showHiddenFiles: boolean;
   showPreviewPanel: boolean;
   previewPanelWidth: number;
+  maxPreviewSizeBytes: number;
   pluginsConfig: Record<string, boolean>;
   showQueueDrawer: boolean;
   conflictStrategy: ConflictStrategy;
@@ -256,6 +257,7 @@ interface AppStoreState {
   setShowHiddenFiles: (show: boolean) => void;
   setShowPreviewPanel: (show: boolean) => void;
   setPreviewPanelWidth: (width: number) => void;
+  setMaxPreviewSizeBytes: (bytes: number) => void;
   setPluginEnabled: (pluginId: string, enabled: boolean) => void;
   setShowQueueDrawer: (show: boolean) => void;
   setConflictStrategy: (strategy: ConflictStrategy) => void;
@@ -314,6 +316,7 @@ export const useAppStore = create<AppStoreState>()(
       showHiddenFiles: false,
       showPreviewPanel: true,
       previewPanelWidth: 360,
+      maxPreviewSizeBytes: 5 * 1024 * 1024,
       pluginsConfig: {},
       showQueueDrawer: false,
       conflictStrategy: "ask",
@@ -361,6 +364,8 @@ export const useAppStore = create<AppStoreState>()(
       setShowPreviewPanel: (show) => set({ showPreviewPanel: show }),
       setPreviewPanelWidth: (width) =>
         set({ previewPanelWidth: Math.max(260, Math.min(800, width)) }),
+      setMaxPreviewSizeBytes: (bytes) =>
+        set({ maxPreviewSizeBytes: Math.max(1024, bytes) }),
       setPluginEnabled: (pluginId, enabled) =>
         set((state) => ({
           pluginsConfig: { ...state.pluginsConfig, [pluginId]: enabled },
@@ -403,6 +408,7 @@ export const useAppStore = create<AppStoreState>()(
           showHiddenFiles: false,
           showPreviewPanel: true,
           previewPanelWidth: 360,
+          maxPreviewSizeBytes: 5 * 1024 * 1024,
           pluginsConfig: {},
           confirmDelete: true,
           pendingConflictPrompt: null,
@@ -812,6 +818,7 @@ export const useAppStore = create<AppStoreState>()(
             showHiddenFiles: state.showHiddenFiles,
             showPreviewPanel: state.showPreviewPanel,
             previewPanelWidth: state.previewPanelWidth,
+            maxPreviewSizeBytes: state.maxPreviewSizeBytes,
             pluginsConfig: state.pluginsConfig,
             confirmDelete: state.confirmDelete,
             conflictStrategy: state.conflictStrategy,
@@ -852,6 +859,11 @@ export const useAppStore = create<AppStoreState>()(
             cfg.previewPanelWidth <= 800
               ? cfg.previewPanelWidth
               : state.previewPanelWidth,
+          maxPreviewSizeBytes:
+            typeof cfg.maxPreviewSizeBytes === "number" &&
+            cfg.maxPreviewSizeBytes >= 1024
+              ? cfg.maxPreviewSizeBytes
+              : state.maxPreviewSizeBytes,
           pluginsConfig:
             cfg.pluginsConfig && typeof cfg.pluginsConfig === "object"
               ? { ...state.pluginsConfig, ...cfg.pluginsConfig }
@@ -962,6 +974,7 @@ export const useAppStore = create<AppStoreState>()(
         showHiddenFiles: state.showHiddenFiles,
         showPreviewPanel: state.showPreviewPanel,
         previewPanelWidth: state.previewPanelWidth,
+        maxPreviewSizeBytes: state.maxPreviewSizeBytes,
         pluginsConfig: state.pluginsConfig,
         confirmDelete: state.confirmDelete,
         conflictStrategy: state.conflictStrategy,

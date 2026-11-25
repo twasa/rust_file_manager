@@ -58,8 +58,11 @@ async fn cmd_read_directory(
 }
 
 #[tauri::command]
-async fn cmd_read_file_preview(path: String) -> Result<FilePreviewData, String> {
-    tokio::task::spawn_blocking(move || read_file_preview(&path))
+async fn cmd_read_file_preview(
+    path: String,
+    max_bytes: Option<usize>,
+) -> Result<FilePreviewData, String> {
+    tokio::task::spawn_blocking(move || read_file_preview(&path, max_bytes))
         .await
         .map_err(|e| e.to_string())?
 }

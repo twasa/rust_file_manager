@@ -9,6 +9,7 @@ import {
   Edit3,
   Copy,
   Folder,
+  AlertTriangle,
 } from "lucide-react";
 import {
   apiComputeChecksum,
@@ -44,23 +45,26 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const panelWidth = useAppStore((s) => s.previewPanelWidth);
   const setPanelWidth = useAppStore((s) => s.setPreviewPanelWidth);
   const pluginsConfig = useAppStore((s) => s.pluginsConfig);
+  const maxPreviewSizeBytes = useAppStore((s) => s.maxPreviewSizeBytes);
 
   const [preview, setPreview] = useState<FilePreviewData | null>(null);
   const [checksum, setChecksum] = useState<FileChecksumResult | null>(null);
   const [loadingHash, setLoadingHash] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [forceLoadExceeded, setForceLoadExceeded] = useState(false);
 
   const singleEntry = selectedEntries.length === 1 ? selectedEntries[0] : null;
 
   // 載入單選檔案的預覽資訊
   useEffect(() => {
     setChecksum(null);
+    setForceLoadExceeded(false);
     if (!singleEntry) {
       setPreview(null);
       return;
     }
     let cancelled = false;
-    apiReadFilePreview(singleEntry.path)
+    apiReadFilePreview(singleEntry.path, maxPreviewSizeBytes)
       .then((data) => {
         if (!cancelled) setPreview(data);
       })
@@ -70,7 +74,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [singleEntry?.path]);
+  }, [singleEntry?.path, maxPreviewSizeBytes]);
 
   // 分段載入更多內容 (Load More)
   const handleLoadMore = useCallback(async () => {
@@ -391,6 +395,34 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
             {preview.kind === "directory" ? (
               <div className="text-slate-400 text-center py-8">
                 雙擊或按 Enter 進入此目錄瀏覽內容
+              </div>
+            ) : singleEntry.size > maxPreviewSizeBytes && !forceLoadExceeded ? (
+              <div className="p-4 m-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-2.5">
+                <div className="flex items-center gap-2 font-medium">
+                  <AlertTriangle size={16} className="text-amber-400 shrink-0" />
+                  <span>
+                    檔案容量 ({formatBytes(singleEntry.size)}) 超出預設預覽上限 ({formatBytes(maxPreviewSizeBytes)})
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  為確保系統記憶體穩定與操作流暢，預設不自動加載超額檔案。您可點擊強制載入，或於「設定 → 外掛功能管理」調整預設上限。
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setForceLoadExceeded(true)}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-medium transition-colors"
+                  >
+                    強制載入預覽
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => apiOpenItem(singleEntry.path)}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] transition-colors"
+                  >
+                    以預設程式開啟
+                  </button>
+                </div>
               </div>
             ) : matchedPlugin ? (
               <matchedPlugin.component
