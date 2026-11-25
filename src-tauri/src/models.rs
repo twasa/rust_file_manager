@@ -312,6 +312,23 @@ pub struct FilePreviewData {
     pub text_preview: Option<String>,
     pub total_lines: Option<usize>,
     pub dir_item_count: Option<usize>,
+    #[serde(default)]
+    pub has_more: Option<bool>,
+    #[serde(default)]
+    pub loaded_bytes: Option<usize>,
+}
+
+/// 檔案分段讀取結果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileChunkData {
+    pub path: String,
+    pub offset: u64,
+    pub bytes_read: usize,
+    pub total_size: u64,
+    pub content: String,
+    pub is_binary: bool,
+    pub has_more: bool,
 }
 
 /// 將路徑正規化為跨平台通用正斜線格式

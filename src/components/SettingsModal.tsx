@@ -13,6 +13,7 @@ import {
   TerminalSquare,
   RefreshCw,
   Trash2,
+  Boxes,
 } from "lucide-react";
 import {
   apiClearLogs,
@@ -34,6 +35,7 @@ import {
   saveSettingsToFile,
 } from "../store/useAppStore";
 import { keyboardEventToCombo } from "../utils/formatters";
+import { pluginRegistry } from "../plugins/registry";
 import type {
   ConflictStrategy,
   LogFormat,
@@ -44,7 +46,7 @@ import type {
 
 interface SettingsModalProps {
   visible: boolean;
-  initialTab?: "appearance" | "shortcuts" | "queue" | "config" | "logs";
+  initialTab?: "appearance" | "shortcuts" | "queue" | "plugins" | "config" | "logs";
   onClose: () => void;
   onNotify?: (msg: string) => void;
 }
@@ -56,7 +58,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onNotify,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    "appearance" | "shortcuts" | "queue" | "config" | "logs"
+    "appearance" | "shortcuts" | "queue" | "plugins" | "config" | "logs"
   >(initialTab);
   const [recordingId, setRecordingId] = useState<ShortcutActionId | null>(null);
   const [customFontInput, setCustomFontInput] = useState("");
@@ -93,6 +95,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const setLogLevel = useAppStore((s) => s.setLogLevel);
   const exportConfigJson = useAppStore((s) => s.exportConfigJson);
   const importConfigJson = useAppStore((s) => s.importConfigJson);
+  const pluginsConfig = useAppStore((s) => s.pluginsConfig);
+  const setPluginEnabled = useAppStore((s) => s.setPluginEnabled);
 
   const refreshLogs = async () => {
     setLoadingLogs(true);
@@ -268,6 +272,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <ShieldCheck size={15} />
             <span>檔案佇列與衝突策略</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("plugins")}
+            className={`flex items-center gap-2 px-3.5 py-2 border-b-2 font-medium transition-colors shrink-0 ${
+              activeTab === "plugins"
+                ? "border-cyan-500 text-cyan-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Boxes size={15} />
+            <span>外掛功能管理</span>
           </button>
           <button
             type="button"
@@ -756,6 +772,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "plugins" && (
+            <div className="space-y-4">
+              <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-lg text-xs flex items-center justify-between">
+                <div>
+                  <span className="font-semibold text-slate-200">
+                    微核心外掛管理 (Micro-Kernel Plugin Architecture)
+                  </span>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    所有預覽模組均採動態按需載入。停用不需要的外掛可維持最極簡的記憶體佔用與最輕量的執行環境。
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                {pluginRegistry.getAllPlugins().map((plugin) => {
+                  const isEnabled =
+                    pluginsConfig[plugin.id] ?? plugin.defaultEnabled;
+                  return (
+                    <div
+                      key={plugin.id}
+                      className="p-3.5 rounded-lg border border-slate-800 bg-slate-900/40 flex items-center justify-between hover:bg-slate-900/70 transition-colors"
+                    >
+                      <div className="space-y-1 pr-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-200 text-xs">
+                            {plugin.name}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
+                            v{plugin.version}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono">
+                            {plugin.id}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                          {plugin.description}
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={isEnabled}
+                          onChange={() =>
+                            setPluginEnabled(plugin.id, !isEnabled)
+                          }
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                      </label>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

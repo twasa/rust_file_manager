@@ -1,13 +1,13 @@
 use crate::models::{
-    normalize_path_str, DirStats, DirectoryListing, EntryKind, FileEntry, FilePreviewData,
-    ItemDetailedInfo, SpecialLocation, SystemLocations, VolumeInfo,
+    normalize_path_str, DirStats, DirectoryListing, EntryKind, FileChunkData, FileEntry,
+    FilePreviewData, ItemDetailedInfo, SpecialLocation, SystemLocations, VolumeInfo,
 };
 use lru::LruCache;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Seek};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -503,12 +503,14 @@ pub fn read_file_preview(raw_path: &str) -> Result<FilePreviewData, String> {
             text_preview: None,
             total_lines: None,
             dir_item_count: count,
+            has_more: Some(false),
+            loaded_bytes: Some(0),
         });
     }
 
     let size = meta.len();
-    // 讀取最多 32 KB 預覽
-    let max_bytes = 32 * 1024;
+    // 讀取最多 64 KB 預覽
+    let max_bytes = 64 * 1024;
     let mut file = fs::File::open(&path).map_err(|e| e.to_string())?;
     let mut buffer = vec![0u8; (size as usize).min(max_bytes)];
     let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
@@ -526,6 +528,8 @@ pub fn read_file_preview(raw_path: &str) -> Result<FilePreviewData, String> {
         (None, None)
     };
 
+    let has_more = size > n as u64;
+
     Ok(FilePreviewData {
         path: normalize_path_str(&path),
         name,
@@ -536,6 +540,61 @@ pub fn read_file_preview(raw_path: &str) -> Result<FilePreviewData, String> {
         text_preview,
         total_lines,
         dir_item_count: None,
+        has_more: Some(has_more),
+        loaded_bytes: Some(n),
+    })
+}
+
+/// 讀取檔案分段（支援大檔案動態分頁與載入更多）
+pub fn read_file_chunk(raw_path: &str, offset: u64, length: usize) -> Result<FileChunkData, String> {
+    let path = PathBuf::from(raw_path);
+    if !path.exists() {
+        return Err("檔案不存在".to_string());
+    }
+    let meta = fs::metadata(&path).map_err(|e| e.to_string())?;
+    if meta.is_dir() {
+        return Err("無法讀取目錄內容為分段".to_string());
+    }
+    let total_size = meta.len();
+    if offset >= total_size {
+        return Ok(FileChunkData {
+            path: normalize_path_str(&path),
+            offset,
+            bytes_read: 0,
+            total_size,
+            content: String::new(),
+            is_binary: false,
+            has_more: false,
+        });
+    }
+
+    let mut file = fs::File::open(&path).map_err(|e| e.to_string())?;
+    file.seek(std::io::SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
+
+    let max_to_read = length.min((total_size - offset) as usize).min(256 * 1024);
+    let mut buffer = vec![0u8; max_to_read];
+    let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
+    buffer.truncate(n);
+
+    let sample_len = buffer.len().min(1024);
+    let is_binary = buffer[..sample_len].contains(&0);
+
+    let content = if !is_binary {
+        String::from_utf8_lossy(&buffer).to_string()
+    } else {
+        String::new()
+    };
+
+    let has_more = offset + (n as u64) < total_size;
+
+    Ok(FileChunkData {
+        path: normalize_path_str(&path),
+        offset,
+        bytes_read: n,
+        total_size,
+        content,
+        is_binary,
+        has_more,
     })
 }
 
@@ -803,6 +862,38 @@ mod tests {
         assert_eq!(multi_stats.total_files, 2);
         assert_eq!(multi_stats.total_dirs, 1);
         assert_eq!(multi_stats.total_bytes, 17);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_read_file_preview_and_chunk() {
+        let temp_dir = std::env::temp_dir().join(format!("rfm_test_preview_{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let test_file = temp_dir.join("sample.txt");
+        let content = "Line 1: Hello World\nLine 2: Rust File Manager\nLine 3: Plugin Architecture\n";
+        fs::write(&test_file, content.as_bytes()).unwrap();
+
+        // 測試 preview
+        let preview = read_file_preview(&test_file.to_string_lossy()).unwrap();
+        assert_eq!(preview.name, "sample.txt");
+        assert_eq!(preview.is_binary, false);
+        assert_eq!(preview.total_lines, Some(3));
+        assert!(preview.text_preview.as_ref().unwrap().contains("Hello World"));
+        assert_eq!(preview.has_more, Some(false));
+        assert_eq!(preview.loaded_bytes, Some(content.len()));
+
+        // 測試 chunk 讀取
+        let chunk1 = read_file_chunk(&test_file.to_string_lossy(), 0, 10).unwrap();
+        assert_eq!(chunk1.offset, 0);
+        assert_eq!(chunk1.bytes_read, 10);
+        assert_eq!(chunk1.content, &content[..10]);
+        assert_eq!(chunk1.has_more, true);
+
+        let chunk2 = read_file_chunk(&test_file.to_string_lossy(), 10, 200).unwrap();
+        assert_eq!(chunk2.offset, 10);
+        assert_eq!(chunk2.content, &content[10..]);
+        assert_eq!(chunk2.has_more, false);
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

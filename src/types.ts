@@ -163,6 +163,18 @@ export interface FilePreviewData {
   textPreview: string | null;
   totalLines: number | null;
   dirItemCount: number | null;
+  hasMore?: boolean;
+  loadedBytes?: number;
+}
+
+export interface FileChunkData {
+  path: string;
+  offset: number;
+  bytesRead: number;
+  totalSize: number;
+  content: string;
+  isBinary: boolean;
+  hasMore: boolean;
 }
 
 export interface ItemDetailedInfo {

@@ -48,6 +48,7 @@ import { isBrowserHotkeySuppressed } from "./utils/browserEvents";
 import { Sidebar } from "./components/Sidebar";
 import { FilePane } from "./components/FilePane";
 import { PreviewPanel } from "./components/PreviewPanel";
+import "./plugins/builtin";
 import { QueueDrawer } from "./components/QueueDrawer";
 import { ContextMenu, ContextMenuState } from "./components/ContextMenu";
 import { BatchRenameModal } from "./components/BatchRenameModal";
@@ -1136,10 +1137,13 @@ export const App: React.FC = () => {
 
         {showPreviewPanel && (
           <PreviewPanel
-            selectedPath={
-              selectedEntries.length === 1 ? selectedEntries[0].path : null
-            }
+            selectedEntries={selectedEntries}
+            currentDirPath={currentTab?.path || ""}
             onNotify={notify}
+            onBatchRename={() => {
+              setBatchRenameTargets(selectedEntries);
+              setBatchRenameModalOpen(true);
+            }}
           />
         )}
       </div>
