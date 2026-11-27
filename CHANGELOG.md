@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **發布打包流程純粹化 (`scripts/build-release.ps1`, `scripts/build-release.sh`, `package.json`)**:
+  - `build-release.ps1` 與 `build-release.sh` 預設專注打包平台官方系統安裝包：Windows 平台打包輸出單一 MSI 安裝包 (`*.msi`)，Linux 輸出 `.deb`、`.rpm` 與 `.AppImage`，macOS 輸出 `.dmg`。
+  - 預設不再同時將免安裝單一執行檔重複傾印至 `release-artifacts/`，如需免安裝版可顯式傳入 `-PortableOnly` 或 `-IncludePortable`。
+  - 確保 Windows 平台執行 `build-release.ps1` 時交付目錄 (`release-artifacts/`) 純粹僅含單一 `.msi` 與 `SHA256SUMS.txt`。
+
 ### Fixed
 - **修復書籤載入時特定工作區路徑遭錯誤刪除之倒退缺陷 (Bookmark Persistence & Whitelist Purge Fix)** (`src/store/useAppStore.ts` & `src/store/useAppStore.test.ts`)：
   - 徹底移除 `importConfigJson` 中過時之硬編碼路徑過濾邏輯（早期為清理 v0.1 硬編碼工作區遺留的 `filter(b => b.path !== "D:/devops_workspace" ...)`）。

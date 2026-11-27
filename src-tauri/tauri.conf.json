@@ -55,8 +55,7 @@
     "windows": {
       "wix": {
         "language": [
-          "zh-TW",
-          "en-US"
+          "zh-TW"
         ]
       }
     }

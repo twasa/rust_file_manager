@@ -1,23 +1,28 @@
 ﻿<#
 .SYNOPSIS
-    Rust File Manager (Tauri 2.x) 跨平台單一執行檔 (Portable) 與安裝包 (Installer) 自動化打包腳本
+    Rust File Manager (Tauri 2.x) 跨平台發布打包腳本 (Build Release & Export Artifacts)
 
 .DESCRIPTION
-    自動執行前端打包與 Tauri 2.x Release 編譯，並將產出的：
-    1. 免安裝單一執行檔 (Portable Binary: .exe / Linux binary)
-    2. 系統原生安裝包 (Windows NSIS .exe / .msi、Linux .deb / .rpm / .AppImage、macOS .dmg / .app)
+    自動執行前端打包與 Tauri 2.x Release 編譯，並匯出各平台原生安裝包：
+    - Windows: 系統原生單一 MSI 安裝套件 (*.msi)
+    - Linux: 原生發行版套件 (.deb, .rpm, .AppImage)
+    - macOS: 磁碟映像檔 (.dmg)
     統一整理匯出至專案根目錄下的 release-artifacts/ 目錄，並自動計算 SHA-256 校驗碼。
 
 .PARAMETER PortableOnly
-    僅編譯免安裝單一執行檔 (--no-bundle)，速度最快，不產生安裝程式
+    僅編譯免安裝單一執行檔 (--no-bundle)，速度最快，不產生安裝套件
+
+.PARAMETER IncludePortable
+    在打包系統安裝套件的同時，額外匯出免安裝單一執行檔至 release-artifacts/
 
 .PARAMETER Target
-    指定目標安裝包格式 (例如: nsis, msi, deb, rpm, appimage, dmg, app, all)，預設為 all
+    指定目標安裝包格式 (例如: msi, deb, rpm, appimage, dmg, all)，在 Windows 下預設為 msi
 #>
 
 [CmdletBinding()]
 param(
     [switch]$PortableOnly,
+    [switch]$IncludePortable,
     [string]$Target = "all"
 )
 
@@ -100,6 +105,16 @@ if ($targetDrive) {
     }
 }
 
+$ReleaseDir = if ($env:CARGO_TARGET_DIR -and (Test-Path (Join-Path $env:CARGO_TARGET_DIR "release"))) {
+    Join-Path $env:CARGO_TARGET_DIR "release"
+} else {
+    Join-Path $ProjectRoot "src-tauri/target/release"
+}
+$BundleDir = Join-Path $ReleaseDir "bundle"
+if (Test-Path $BundleDir) {
+    Remove-Item -Path $BundleDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host "[INFO]  開始編譯 Rust File Manager 正式發行版 (Release Build)..." -ForegroundColor Cyan
 
 Push-Location $ProjectRoot
@@ -111,8 +126,13 @@ try {
         Write-Host "[INFO]  模式：產生單一執行檔 + 指定安裝包 ($Target)" -ForegroundColor Cyan
         npm run tauri -- build --bundles $Target
     } else {
-        Write-Host "[INFO]  模式：產生單一執行檔 + 平台完整安裝包" -ForegroundColor Cyan
-        npm run tauri -- build
+        if ($IsWindows) {
+            Write-Host "[INFO]  模式：Windows 平台專注打包系統單一安裝檔 (MSI)" -ForegroundColor Cyan
+            npm run tauri -- build --bundles msi
+        } else {
+            Write-Host "[INFO]  模式：跨平台系統完整安裝包 (deb, appimage, dmg)" -ForegroundColor Cyan
+            npm run tauri -- build
+        }
     }
     if ($LASTEXITCODE -ne 0) {
         $failedDrive = Get-TargetDriveInfo $TargetBuildDir
@@ -155,31 +175,42 @@ $ReleaseDir = if ($env:CARGO_TARGET_DIR -and (Test-Path (Join-Path $env:CARGO_TA
 }
 $BundleDir = Join-Path $ReleaseDir "bundle"
 
-# 1. 複製免安裝單一執行檔 (Portable Executable)
-if ($IsWindows) {
-    $exePath = Join-Path $ReleaseDir "rust-file-manager.exe"
-    if (Test-Path $exePath) {
-        $portableDest = Join-Path $OutDir "rust-file-manager-portable-windows-x64.exe"
-        Copy-Item -Path $exePath -Destination $portableDest -Force
-        Write-Host "[OK]    已匯出 Windows 免安裝單一執行檔: $portableDest" -ForegroundColor Green
-    }
-} else {
-    $binPath = Join-Path $ReleaseDir "rust-file-manager"
-    if (Test-Path $binPath) {
-        $osTag = if ($IsMacOS) { "macos" } else { "linux" }
-        $portableDest = Join-Path $OutDir "rust-file-manager-portable-$osTag"
-        Copy-Item -Path $binPath -Destination $portableDest -Force
-        Write-Host "[OK]    已匯出免安裝單一執行檔: $portableDest" -ForegroundColor Green
+# 1. 複製免安裝單一執行檔 (Portable Executable, 僅於指定 -PortableOnly 或 -IncludePortable 時匯出)
+if ($PortableOnly -or $IncludePortable) {
+    if ($IsWindows) {
+        $exePath = Join-Path $ReleaseDir "rust-file-manager.exe"
+        if (Test-Path $exePath) {
+            $portableDest = Join-Path $OutDir "rust-file-manager-portable-windows-x64.exe"
+            Copy-Item -Path $exePath -Destination $portableDest -Force
+            Write-Host "[OK]    已匯出 Windows 免安裝單一執行檔: $portableDest" -ForegroundColor Green
+        }
+    } else {
+        $binPath = Join-Path $ReleaseDir "rust-file-manager"
+        if (Test-Path $binPath) {
+            $osTag = if ($IsMacOS) { "macos" } else { "linux" }
+            $portableDest = Join-Path $OutDir "rust-file-manager-portable-$osTag"
+            Copy-Item -Path $binPath -Destination $portableDest -Force
+            Write-Host "[OK]    已匯出免安裝單一執行檔: $portableDest" -ForegroundColor Green
+        }
     }
 }
 
-# 2. 複製各平台安裝包 (NSIS .exe, .msi, .deb, .rpm, .AppImage, .dmg)
-if (Test-Path $BundleDir) {
-    $installers = Get-ChildItem -Path $BundleDir -Recurse -File -Include "*.exe", "*.msi", "*.deb", "*.rpm", "*.AppImage", "*.dmg"
-    foreach ($file in $installers) {
-        $dest = Join-Path $OutDir $file.Name
-        Copy-Item -Path $file.FullName -Destination $dest -Force
-        Write-Host "[OK]    已匯出安裝包: $dest" -ForegroundColor Green
+# 2. 複製各平台系統原生安裝包 (Windows: 系統單一 .msi; Linux: .deb, .rpm, .AppImage; macOS: .dmg)
+if (-not $PortableOnly) {
+    if (Test-Path $BundleDir) {
+        $filterPatterns = if ($IsWindows) {
+            @("*.msi")
+        } elseif ($IsMacOS) {
+            @("*.dmg")
+        } else {
+            @("*.deb", "*.rpm", "*.AppImage")
+        }
+        $installers = Get-ChildItem -Path $BundleDir -Recurse -File -Include $filterPatterns
+        foreach ($file in $installers) {
+            $dest = Join-Path $OutDir $file.Name
+            Copy-Item -Path $file.FullName -Destination $dest -Force
+            Write-Host "[OK]    已匯出系統安裝包: $dest" -ForegroundColor Green
+        }
     }
 }
 

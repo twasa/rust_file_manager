@@ -27,12 +27,17 @@ if [[ ! -f "${PROJECT_ROOT}/node_modules/.bin/tauri" ]]; then
 fi
 
 PORTABLE_ONLY=0
+INCLUDE_PORTABLE=0
 BUNDLES="all"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --portable-only)
       PORTABLE_ONLY=1
+      shift
+      ;;
+    --include-portable)
+      INCLUDE_PORTABLE=1
       shift
       ;;
     --bundles)
@@ -45,7 +50,8 @@ Usage: ./scripts/build-release.sh [OPTIONS]
 
 Options:
   --portable-only      僅編譯免安裝單一執行檔 (--no-bundle)
-  --bundles <FORMAT>   指定打包格式 (例如: deb, rpm, appimage, dmg, nsis, msi)
+  --include-portable   打包安裝套件同時匯出免安裝執行檔至 release-artifacts/
+  --bundles <FORMAT>   指定打包格式 (例如: deb, rpm, appimage, dmg, msi)
   -h, --help           顯示說明
 EOF
       exit 0
@@ -120,6 +126,14 @@ trap handle_build_failure EXIT
 
 check_disk_space "${TARGET_BUILD_DIR}"
 
+if [[ -n "${CARGO_TARGET_DIR:-}" && -d "${CARGO_TARGET_DIR}/release" ]]; then
+  RELEASE_DIR="${CARGO_TARGET_DIR}/release"
+else
+  RELEASE_DIR="${PROJECT_ROOT}/src-tauri/target/release"
+fi
+BUNDLE_DIR="${RELEASE_DIR}/bundle"
+rm -rf "${BUNDLE_DIR}"
+
 echo "[INFO] 開始編譯 Rust File Manager 正式發行版 (Release Build)..."
 cd "${PROJECT_ROOT}"
 
@@ -143,24 +157,29 @@ BUNDLE_DIR="${RELEASE_DIR}/bundle"
 OS_NAME="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH_NAME="$(uname -m)"
 
-# 1. 複製免安裝單一執行檔
-if [[ -f "${RELEASE_DIR}/rust-file-manager.exe" ]]; then
-  cp "${RELEASE_DIR}/rust-file-manager.exe" "${OUT_DIR}/rust-file-manager-portable-windows-${ARCH_NAME}.exe"
-elif [[ -f "${RELEASE_DIR}/rust-file-manager" ]]; then
-  cp "${RELEASE_DIR}/rust-file-manager" "${OUT_DIR}/rust-file-manager-portable-${OS_NAME}-${ARCH_NAME}"
-  chmod +x "${OUT_DIR}/rust-file-manager-portable-${OS_NAME}-${ARCH_NAME}"
+# 1. 複製免安裝單一執行檔 (僅於 --portable-only 或 --include-portable 時匯出)
+if [[ "${PORTABLE_ONLY}" -eq 1 || "${INCLUDE_PORTABLE}" -eq 1 ]]; then
+  if [[ -f "${RELEASE_DIR}/rust-file-manager.exe" ]]; then
+    cp "${RELEASE_DIR}/rust-file-manager.exe" "${OUT_DIR}/rust-file-manager-portable-windows-${ARCH_NAME}.exe"
+  elif [[ -f "${RELEASE_DIR}/rust-file-manager" ]]; then
+    cp "${RELEASE_DIR}/rust-file-manager" "${OUT_DIR}/rust-file-manager-portable-${OS_NAME}-${ARCH_NAME}"
+    chmod +x "${OUT_DIR}/rust-file-manager-portable-${OS_NAME}-${ARCH_NAME}"
+  fi
 fi
 
-# 2. 複製安裝包產物
-if [[ -d "${BUNDLE_DIR}" ]]; then
-  find "${BUNDLE_DIR}" -maxdepth 3 -type f \( \
-    -name "*.exe" -o \
-    -name "*.msi" -o \
-    -name "*.deb" -o \
-    -name "*.rpm" -o \
-    -name "*.AppImage" -o \
-    -name "*.dmg" \
-  \) -exec cp {} "${OUT_DIR}/" \;
+# 2. 複製各平台系統原生安裝包
+if [[ "${PORTABLE_ONLY}" -ne 1 && -d "${BUNDLE_DIR}" ]]; then
+  if [[ "${OS_NAME}" == "darwin" ]]; then
+    find "${BUNDLE_DIR}" -maxdepth 3 -type f -name "*.dmg" -exec cp {} "${OUT_DIR}/" \;
+  elif [[ "${OS_NAME}" =~ (mingw|msys|cygwin) ]]; then
+    find "${BUNDLE_DIR}" -maxdepth 3 -type f -name "*.msi" -exec cp {} "${OUT_DIR}/" \;
+  else
+    find "${BUNDLE_DIR}" -maxdepth 3 -type f \( \
+      -name "*.deb" -o \
+      -name "*.rpm" -o \
+      -name "*.AppImage" \
+    \) -exec cp {} "${OUT_DIR}/" \;
+  fi
 fi
 
 # 3. 產生 SHA256SUMS.txt

@@ -16,6 +16,7 @@
     "build:local:sh": "bash ./scripts/build-local.sh",
     "package:plugins": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-plugins.ps1",
     "package:portable": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-release.ps1 -PortableOnly",
+    "package:msi": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-release.ps1 -Target msi",
     "package:all": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-release.ps1"
   },
   "dependencies": {
