@@ -12,7 +12,7 @@ import type { FileEntry } from "../types";
 describe("useAppStore delete confirmation and settings", () => {
   beforeEach(() => {
     disableConfigAutoSave();
-    useAppStore.getState().resetAllSettings();
+    useAppStore.getState().resetToFactoryDefaults();
   });
 
   afterEach(() => {
@@ -230,5 +230,50 @@ describe("useAppStore delete confirmation and settings", () => {
     expect(importedTab.history.length).toBe(50);
     expect(importedTab.history[49]).toBe("/legacy/path_119");
     expect(importedTab.historyIndex).toBe(49);
+  });
+
+  it("resets state completely to pure factory defaults including tabs and clear localStorage", () => {
+    // 模擬操作產生多個歷史與非預設設定
+    useAppStore.getState().navigateTab("left", "/dir/custom1");
+    useAppStore.getState().navigateTab("left", "/dir/custom2");
+    useAppStore.getState().setDualPaneEnabled(true);
+    useAppStore.getState().setShowHiddenFiles(true);
+    expect(useAppStore.getState().panes.left.tabs[0].history.length).toBe(3);
+    expect(useAppStore.getState().dualPaneEnabled).toBe(true);
+
+    // 執行徹底出廠重置
+    useAppStore.getState().resetToFactoryDefaults("/factory/home");
+
+    const state = useAppStore.getState();
+    expect(state.dualPaneEnabled).toBe(false);
+    expect(state.showHiddenFiles).toBe(false);
+    expect(state.panes.left.tabs.length).toBe(1);
+    expect(state.panes.left.tabs[0].path).toBe("/factory/home");
+    expect(state.panes.left.tabs[0].history).toEqual(["/factory/home"]);
+    expect(state.panes.left.tabs[0].historyIndex).toBe(0);
+    expect(state.panes.right.tabs[0].history).toEqual(["/factory/home"]);
+  });
+
+  it("falls back to pure factory default panes when imported config lacks panes", () => {
+    // 模擬已存在的髒歷史
+    useAppStore.getState().navigateTab("left", "/dirty/path1");
+    useAppStore.getState().navigateTab("left", "/dirty/path2");
+
+    // 匯入完全缺少 panes 欄位的極簡設定檔（如 Rust 後端預設或手動 JSON）
+    useAppStore.getState().importConfigJson(
+      JSON.stringify({
+        settings: {
+          confirmDelete: false,
+          conflictStrategy: "skip",
+        },
+      })
+    );
+
+    const state = useAppStore.getState();
+    expect(state.confirmDelete).toBe(false);
+    expect(state.conflictStrategy).toBe("skip");
+    // 驗證 panes 自動重置為出廠乾淨狀態，絕不保留髒歷史
+    expect(state.panes.left.tabs[0].history.length).toBe(1);
+    expect(state.panes.left.tabs[0].historyIndex).toBe(0);
   });
 });
