@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 const MAX_LOG_FILE_BYTES: u64 = 5 * 1024 * 1024; // 單一檔案上限 5 MB，超過自動輪替 (Rotation)
@@ -280,17 +280,69 @@ impl AppLogger {
     }
 }
 
-/// 取得應用程式主要基底目錄（優先使用 .exe 同目錄以達成免安裝 Portable 設計，否則使用系統設定目錄）
+/// 檢測目錄是否具備寫入權限（透過建立並移除極小的臨時測試檔）
+pub fn is_directory_writable(dir: &Path) -> bool {
+    if !dir.exists() || !dir.is_dir() {
+        return false;
+    }
+    let probe = dir.join(format!(".rfm_perm_probe_{}", std::process::id()));
+    if fs::write(&probe, b"ok").is_ok() {
+        let _ = fs::remove_file(&probe);
+        true
+    } else {
+        false
+    }
+}
+
+/// 判斷目前執行環境是否為免安裝可攜版 (Portable Mode)
+pub fn is_portable_environment(exe_dir: &Path) -> bool {
+    // 1. 若目錄無法寫入，強制視為系統安裝版以回退至 AppData
+    if !is_directory_writable(exe_dir) {
+        return false;
+    }
+
+    // 2. Windows 平台防呆：若路徑位於 Program Files 系統安裝目錄（即使有管理員寫入權限），仍視為安裝版以符合標準
+    #[cfg(target_os = "windows")]
+    {
+        let exe_dir_str = exe_dir.to_string_lossy().to_ascii_lowercase();
+        if let Ok(pf) = std::env::var("ProgramFiles") {
+            if exe_dir_str.starts_with(&pf.to_ascii_lowercase()) {
+                return false;
+            }
+        }
+        if let Ok(pf86) = std::env::var("ProgramFiles(x86)") {
+            if exe_dir_str.starts_with(&pf86.to_ascii_lowercase()) {
+                return false;
+            }
+        }
+        if let Ok(pfw64) = std::env::var("ProgramW6432") {
+            if exe_dir_str.starts_with(&pfw64.to_ascii_lowercase()) {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+/// 取得應用程式主要基底目錄
+/// 1. 若為 Portable Mode（執行檔同層具備寫入權限且非系統目錄），優先使用 exe 目錄，實現綠色免安裝。
+/// 2. 若為安裝版（如標準 MSI 安裝至 Program Files），自動導向至使用者標準資料目錄 (AppData)。
 pub fn resolve_app_directory() -> PathBuf {
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
-            return exe_dir.to_path_buf();
+            if is_portable_environment(exe_dir) {
+                return exe_dir.to_path_buf();
+            }
         }
     }
-    let base = dirs::config_dir()
+    let base = dirs::data_local_dir()
+        .or_else(dirs::config_dir)
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("rust-file-manager")
+    let target = base.join("rust-file-manager");
+    let _ = fs::create_dir_all(&target);
+    target
 }
 
 pub fn resolve_log_directory() -> PathBuf {
@@ -361,5 +413,28 @@ mod tests {
         });
         let warnings = diagnose_config_value(&bad_json);
         assert_eq!(warnings.len(), 3);
+    }
+
+    #[test]
+    fn test_is_directory_writable_and_portable_detection() {
+        let temp_dir = std::env::temp_dir();
+        assert!(is_directory_writable(&temp_dir));
+
+        let non_existent = temp_dir.join("non_existent_rfm_dir_9999");
+        assert!(!is_directory_writable(&non_existent));
+
+        // Program Files 目錄防呆檢測
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(pf) = std::env::var("ProgramFiles") {
+                let pf_path = PathBuf::from(pf);
+                assert!(!is_portable_environment(&pf_path));
+            }
+        }
+
+        // resolve_app_directory 回傳目錄必須存在且具備寫入權限
+        let app_dir = resolve_app_directory();
+        assert!(app_dir.exists());
+        assert!(is_directory_writable(&app_dir));
     }
 }

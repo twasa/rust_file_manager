@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 確保 Windows 平台執行 `build-release.ps1` 時交付目錄 (`release-artifacts/`) 純粹僅含單一 `.msi` 與 `SHA256SUMS.txt`。
 
 ### Fixed
+- **修復 MSI 系統安裝版因 Program Files 唯讀權限導致設定檔無法儲存之問題 (Installed App Data Fallback & Write Permission Detection)** (`src-tauri/src/logger.rs` & `src-tauri/src/plugins_ops.rs`)：
+  - 新增 `is_directory_writable` 與 `is_portable_environment` 權限感知機制。
+  - 當應用程式安裝於系統唯讀目錄（如 Windows `C:\Program Files`）時，自動將設定檔 (`settings.json`)、日誌 (`logs/`) 與外掛目錄由唯讀之 `exe` 目錄安全回退至標準使用者目錄（Windows `%LOCALAPPDATA%\rust-file-manager`），徹底解決標準使用者權限下因拒絕存取導致書籤與設定重啟遺失之問題。
+  - 保留免安裝可攜版（Portable Mode，如 `d:\tools\RFM`）之綠色隨身碟特徵，在目錄具備寫入權限時維持將資料存放於執行檔同層。
+  - 外掛管理系統支援同時掃描系統內建外掛與使用者 AppData 外掛。
 - **修復書籤載入時特定工作區路徑遭錯誤刪除之倒退缺陷 (Bookmark Persistence & Whitelist Purge Fix)** (`src/store/useAppStore.ts` & `src/store/useAppStore.test.ts`)：
   - 徹底移除 `importConfigJson` 中過時之硬編碼路徑過濾邏輯（早期為清理 v0.1 硬編碼工作區遺留的 `filter(b => b.path !== "D:/devops_workspace" ...)`）。
   - 改採健全結構校驗（確保每個書籤具備合法的字串型別 `label` 與 `path`），確保使用者新增之任何路徑（包含本機工作區、磁碟根目錄或任意工具目錄）在視窗重啟後均可完整保留不丟失。
