@@ -510,9 +510,14 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         }),
 
       removeBookmark: (path) =>
-        set((state) => ({
-          bookmarks: state.bookmarks.filter((b) => b.path !== path),
-        })),
+        set((state) => {
+          const norm = path.replace(/\\/g, "/");
+          return {
+            bookmarks: state.bookmarks.filter(
+              (b) => b.path !== norm && b.path !== path
+            ),
+          };
+        }),
 
       initDefaultPaths: (defaultPath) =>
         set((state) => {
@@ -970,13 +975,18 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
           });
         }
 
-        // 書籤清理（過濾早期硬編碼的工作區書籤）
-        let importedBookmarks = Array.isArray(cfg.bookmarks) ? cfg.bookmarks : [];
-        importedBookmarks = importedBookmarks.filter(
-          (b: { label: string; path: string }) =>
-            b.path !== "D:/devops_workspace" &&
-            b.path !== "D:/devops_workspace/private"
-        );
+        // 匯入書籤設定（驗證有效結構並完整保留使用者自訂書籤，絕不強制清除任何自訂路徑）
+        const importedBookmarks = Array.isArray(cfg.bookmarks)
+          ? cfg.bookmarks.filter(
+              (b: unknown): b is { label: string; path: string } =>
+                Boolean(
+                  b &&
+                  typeof b === "object" &&
+                  typeof (b as { label?: unknown }).label === "string" &&
+                  typeof (b as { path?: unknown }).path === "string"
+                )
+            )
+          : [];
 
         // 分頁健全保護：若 cfg 沒有完整 panes，則使用純淨的工廠預設分頁，杜絕繼承歷史幽靈
         const sanitizeTabs = (tabs?: TabItem[]): TabItem[] | undefined => {

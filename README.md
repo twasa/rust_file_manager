@@ -297,7 +297,7 @@ Tauri 2.x 會將前端所有靜態資源（HTML / CSS / JS）直接嵌入編譯�
 #### 支援產出的格式一覽
 | 目標作業系統 | 免安裝單一執行檔 (Portable) | 系統原生安裝包 (Installer) |
 | :--- | :--- | :--- |
-| **Microsoft Windows** | `rust-file-manager-portable-windows-x64.exe` (單一 `.exe` 直接雙擊執行) | NSIS `*-setup.exe`、Windows Installer `*.msi` |
+| **Microsoft Windows** | `rust-file-manager-portable-windows-x64.exe` (單一 `.exe` 直接雙擊執行) | Windows Installer `*.msi` (支援自訂安裝路徑問答與完成資訊摘要) |
 | **Linux** | `rust-file-manager-portable-linux-x86_64` / `*.AppImage` (單一檔案免安裝) | Debian/Ubuntu `*.deb`、Fedora/RHEL `*.rpm`、`*.AppImage` |
 | **macOS** | `Rust File Manager.app` | Apple Disk Image `*.dmg` (支援 Intel `x64` 與 Apple Silicon `arm64`) |
 
@@ -341,8 +341,8 @@ Tauri 2.x 會將前端所有靜態資源（HTML / CSS / JS）直接嵌入編譯�
 ./scripts/build-release.ps1
 # 或使用 npm 指令: npm run package:all
 
-# 3. 僅打包指定格式的安裝包 (例如只打包 Windows NSIS 安裝包)
-./scripts/build-release.ps1 -Target nsis
+# 3. 僅打包指定格式的安裝包 (例如只打包 Windows MSI 安裝包)
+./scripts/build-release.ps1 -Target msi
 ```
 
 **Bash / Zsh (`bash`)**：

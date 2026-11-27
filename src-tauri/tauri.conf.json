@@ -42,10 +42,23 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "msi",
+      "deb",
+      "appimage",
+      "dmg"
+    ],
     "icon": [
       "icons/icon.png",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "wix": {
+        "language": [
+          "zh-TW",
+          "en-US"
+        ]
+      }
+    }
   }
 }
