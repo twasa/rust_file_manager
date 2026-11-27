@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **分頁導航歷史上限保護與一鍵清除功能 (Tab Navigation History Capping & Purge)** (`src/store/useAppStore.ts` & `src/components/SettingsModal.tsx` & `src/components/TabBar.tsx`)：
+  - **50 筆上限保護**：定義 `MAX_TAB_HISTORY = 50`，在目錄切換時自動修剪過期歷史，杜絕 `history` 陣列無上限累積導致 `settings.json` 膨脹至數百行。
+  - **設定檔匯入/還原自動淨化**：在 `importConfigJson` 與 Zustand `merge` 中自動過濾修剪過長歷史，防範舊版資料庫殘留。
+  - **清除歷史按鈕**：於「設定 -> 設定檔匯出/匯入」新增「清除所有分頁歷史紀錄」按鈕，並於分頁右鍵選單新增「清除此分頁歷史」，點擊後立即同步刷新磁碟 `settings.json`。
 - **本地一鍵打包與部署腳本 (`scripts/build-local.ps1` & `scripts/build-local.sh` & `npm run build:local`)**：
   - 支援自動編譯可攜式單一執行檔主體並輸出為單一 `rfm.exe`（Linux/macOS 為 `rfm`）及打包所有獨立外掛。
   - 自動識別 `$env:RFM_HOME`（若未設定則自動預設為 `$HOME\RFM`），將單一主體執行檔 (`rfm.exe`) 與解壓後的外掛即時同步部署至目標工具目錄（`plugins/`），開箱即用且自動清理舊版多餘產物。
