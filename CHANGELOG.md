@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-27
+
 ### Added
 - **全新 PDF 文件獨立預覽外掛 (`rfm.preview.pdf`)** (`plugins/pdf/` & `src/plugins/builtin/index.ts`)：
   - 支援 PDF 文件即時檢視與高畫質向量渲染。
