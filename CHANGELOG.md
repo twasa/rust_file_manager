@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **修復書籤載入時特定工作區路徑遭錯誤刪除之倒退缺陷 (Bookmark Persistence & Whitelist Purge Fix)** (`src/store/useAppStore.ts` & `src/store/useAppStore.test.ts`)：
+  - 徹底移除 `importConfigJson` 中過時之硬編碼路徑過濾邏輯（早期為清理 v0.1 硬編碼工作區遺留的 `filter(b => b.path !== "D:/devops_workspace" ...)`）。
+  - 改採健全結構校驗（確保每個書籤具備合法的字串型別 `label` 與 `path`），確保使用者新增之任何路徑（包含本機工作區、磁碟根目錄或任意工具目錄）在視窗重啟後均可完整保留不丟失。
+  - 同步修復 `removeBookmark` 對 Windows 反斜線路徑之正規化相容性，並補齊 5 項書籤生命週期、重複防護、路徑匯出匯入與髒資料過濾之單元測試。
+
+### Changed
+- **Windows 安裝程式優化為純 MSI 安裝包 (Pure MSI Installer & Custom Install Directory)** (`src-tauri/tauri.conf.json` & `README.md` & `.github/workflows/release.yml`)：
+  - 設定 `bundle.targets` 為 `["msi", "deb", "appimage", "dmg"]`，在 Windows 平台上全面以標準 Windows Installer (`.msi`) 取代 NSIS (`-setup.exe`)，實現單一 `.msi` 乾淨封裝。
+  - 啟用 WiX 原生 `WixUI_InstallDir` 介面導引，在安裝過程中主動詢問使用者自訂目標安裝目錄（具備「瀏覽 (Browse...)」選擇路徑對話框），並於安裝完成時顯示成功摘要資訊。
+  - 設定 WiX 語系支援 `zh-TW` 與 `en-US`，提供更親和的安裝體驗。
+
 ## [0.4.0] - 2026-11-27
 
 ### Added

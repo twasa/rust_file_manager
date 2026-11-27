@@ -276,4 +276,61 @@ describe("useAppStore delete confirmation and settings", () => {
     expect(state.panes.left.tabs[0].history.length).toBe(1);
     expect(state.panes.left.tabs[0].historyIndex).toBe(0);
   });
+
+  it("manages bookmarks properly and preserves all paths including devops_workspace", () => {
+    const store = useAppStore.getState();
+    expect(store.bookmarks).toEqual([]);
+
+    // 新增書籤 (含反斜線自動正規化)
+    store.addBookmark("Tools", "D:\\tools");
+    store.addBookmark("DevOps", "D:/devops_workspace");
+    store.addBookmark("Private", "D:\\devops_workspace\\private");
+
+    let bookmarks = useAppStore.getState().bookmarks;
+    expect(bookmarks.length).toBe(3);
+    expect(bookmarks[0]).toEqual({ label: "Tools", path: "D:/tools" });
+    expect(bookmarks[1]).toEqual({ label: "DevOps", path: "D:/devops_workspace" });
+    expect(bookmarks[2]).toEqual({ label: "Private", path: "D:/devops_workspace/private" });
+
+    // 重複新增應略過
+    store.addBookmark("Duplicate", "D:\\tools");
+    expect(useAppStore.getState().bookmarks.length).toBe(3);
+
+    // 匯出設定驗證
+    const exportedJson = useAppStore.getState().exportConfigJson();
+    const parsed = JSON.parse(exportedJson);
+    expect(parsed.settings.bookmarks.length).toBe(3);
+
+    // 重設狀態後重新匯入
+    useAppStore.getState().resetToFactoryDefaults();
+    expect(useAppStore.getState().bookmarks).toEqual([]);
+
+    useAppStore.getState().importConfigJson(exportedJson);
+    bookmarks = useAppStore.getState().bookmarks;
+    expect(bookmarks.length).toBe(3);
+    expect(bookmarks.some((b) => b.path === "D:/devops_workspace")).toBe(true);
+    expect(bookmarks.some((b) => b.path === "D:/devops_workspace/private")).toBe(true);
+    expect(bookmarks.some((b) => b.path === "D:/tools")).toBe(true);
+
+    // 移除書籤 (支援反斜線與正斜線移除)
+    useAppStore.getState().removeBookmark("D:\\devops_workspace\\private");
+    expect(useAppStore.getState().bookmarks.length).toBe(2);
+    expect(useAppStore.getState().bookmarks.some((b) => b.path === "D:/devops_workspace/private")).toBe(false);
+
+    // 匯入包含髒資料的書籤陣列防禦測試
+    useAppStore.getState().importConfigJson(
+      JSON.stringify({
+        settings: {
+          bookmarks: [
+            { label: "Valid", path: "E:/data" },
+            null,
+            { label: 123, path: "invalid" },
+            { path: "missing_label" },
+            "just_a_string",
+          ],
+        },
+      })
+    );
+    expect(useAppStore.getState().bookmarks).toEqual([{ label: "Valid", path: "E:/data" }]);
+  });
 });

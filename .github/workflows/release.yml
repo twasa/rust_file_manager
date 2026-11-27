@@ -75,7 +75,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "Rust File Manager v__VERSION__"
-          releaseBody: "Cross-platform installers and portable binaries for Windows (.exe/.msi), Linux (.deb/.rpm/.AppImage), and macOS (.dmg/.app)."
+          releaseBody: "Cross-platform installers and portable binaries for Windows (.msi), Linux (.deb/.rpm/.AppImage), and macOS (.dmg/.app)."
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.rust_target }}

@@ -29,7 +29,12 @@
           "**/*",
           "?:/**",
           "?:\\**",
-          "*/**"
+          "*/**",
+          "\\\\*",
+          "\\\\**",
+          "\\\\*\\**",
+          "\\\\?\\**",
+          "\\\\?\\UNC\\**"
         ]
       },
       "csp": "default-src 'self'; script-src 'self' 'unsafe-eval' asset: http://asset.localhost https://asset.localhost blob:; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost https://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost https://asset.localhost data: blob:; frame-src 'self' asset: http://asset.localhost https://asset.localhost blob: data:; object-src 'self' asset: http://asset.localhost https://asset.localhost blob: data:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost https://asset.localhost blob: data:"
@@ -37,10 +42,23 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "msi",
+      "deb",
+      "appimage",
+      "dmg"
+    ],
     "icon": [
       "icons/icon.png",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "wix": {
+        "language": [
+          "zh-TW",
+          "en-US"
+        ]
+      }
+    }
   }
 }
