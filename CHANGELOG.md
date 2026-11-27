@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-27
+
 ### Added
 - **WebView2 資料目錄隔離與可攜式環境 (WebView2 User Data Directory Isolation)** (`src-tauri/src/lib.rs`)：
   - 在 Windows 平台下於 WebView 啟動前自動配置 `WEBVIEW2_USER_DATA_FOLDER`。
