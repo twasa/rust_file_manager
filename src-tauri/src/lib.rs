@@ -3,6 +3,7 @@ pub mod clipboard_ops;
 pub mod fs_ops;
 pub mod logger;
 pub mod models;
+pub mod plugins_ops;
 pub mod queue;
 pub mod system_ops;
 
@@ -21,6 +22,10 @@ use models::{
     ConflictStrategy, DirStats, DirectoryListing, FileChecksumResult, FileChunkData,
     FilePreviewData, ItemDetailedInfo, QueueRetentionPolicy, SystemLocations,
     TransferConflictItem, TransferJobSnapshot, TransferJobType,
+};
+use plugins_ops::{
+    ensure_plugins_directory, install_plugin_package, list_installed_plugins,
+    read_plugin_file_content, uninstall_plugin, InstalledPluginInfo,
 };
 use queue::QueueManager;
 use serde_json::{json, Value};
@@ -693,6 +698,65 @@ async fn cmd_set_system_clipboard_files(paths: Vec<String>, is_cut: bool) -> Res
         .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+async fn cmd_get_plugins_directory() -> Result<String, String> {
+    tokio::task::spawn_blocking(|| {
+        ensure_plugins_directory().map(|p| normalize_path_str(&p))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn cmd_list_installed_plugins() -> Result<Vec<InstalledPluginInfo>, String> {
+    tokio::task::spawn_blocking(list_installed_plugins)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn cmd_install_plugin_package(archive_path: String) -> Result<InstalledPluginInfo, String> {
+    tokio::task::spawn_blocking(move || install_plugin_package(&archive_path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn cmd_install_plugin_with_dialog() -> Result<Option<InstalledPluginInfo>, String> {
+    let mut dialog = rfd::FileDialog::new()
+        .set_title("選擇要安裝的外掛套件包 (.rfmp, .zip)")
+        .add_filter("RFM 外掛包 (*.rfmp, *.zip)", &["rfmp", "zip"]);
+
+    if let Some(desktop) = dirs::desktop_dir() {
+        dialog = dialog.set_directory(&desktop);
+    }
+
+    let file_path = match dialog.pick_file() {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let installed = install_plugin_package(&file_path.to_string_lossy())?;
+    Ok(Some(installed))
+}
+
+#[tauri::command]
+async fn cmd_uninstall_plugin(plugin_id: String) -> Result<bool, String> {
+    tokio::task::spawn_blocking(move || uninstall_plugin(&plugin_id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn cmd_read_plugin_file_content(
+    plugin_id: String,
+    relative_path: String,
+) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || read_plugin_file_content(&plugin_id, &relative_path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let logger = AppLogger::new();
@@ -753,6 +817,12 @@ pub fn run() {
             cmd_write_frontend_log,
             cmd_get_system_clipboard_files,
             cmd_set_system_clipboard_files,
+            cmd_get_plugins_directory,
+            cmd_list_installed_plugins,
+            cmd_install_plugin_package,
+            cmd_install_plugin_with_dialog,
+            cmd_uninstall_plugin,
+            cmd_read_plugin_file_content,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

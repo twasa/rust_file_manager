@@ -52,6 +52,7 @@ import { Sidebar } from "./components/Sidebar";
 import { FilePane } from "./components/FilePane";
 import { PreviewPanel } from "./components/PreviewPanel";
 import "./plugins/builtin";
+import { initExternalPlugins } from "./plugins/loader";
 import { QueueDrawer } from "./components/QueueDrawer";
 import { ContextMenu, ContextMenuState } from "./components/ContextMenu";
 import { BatchRenameModal } from "./components/BatchRenameModal";
@@ -171,8 +172,12 @@ export const App: React.FC = () => {
     document.body.style.fontFamily = fontSettings.fontFamily;
   }, [fontSettings.fontFamily, fontSettings.uiFontSizePx]);
 
-  // 初次掛載時自動從磁碟載入 settings.json (若存在) 並啟動自動儲存同步
+  // 初次掛載時自動從磁碟載入 settings.json (若存在) 並啟動自動儲存同步，並初始化掃描外部外掛
   useEffect(() => {
+    initExternalPlugins().catch((err) => {
+      console.warn("Failed to load external plugins:", err);
+    });
+
     apiLoadConfigFile()
       .then((rawJson) => {
         if (rawJson) {

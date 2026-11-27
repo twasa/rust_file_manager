@@ -1,0 +1,21 @@
+{
+  "id": "rfm.preview.image",
+  "name": "圖片與向量圖預覽器",
+  "version": "1.0.0",
+  "description": "支援 PNG, JPG, WebP, GIF, SVG, BMP, ICO 等縮圖與高畫質預覽、自適應 Fit / 比例縮放與解析度檢視",
+  "category": "viewer",
+  "author": "William Wang",
+  "extensions": [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".svg",
+    ".bmp",
+    ".ico",
+    ".tiff",
+    ".avif"
+  ],
+  "main": "index.js"
+}

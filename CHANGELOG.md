@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **全新 PDF 文件獨立預覽外掛 (`rfm.preview.pdf`)** (`plugins/pdf/` & `src/plugins/builtin/index.ts`)：
+  - 支援 PDF 文件即時檢視與高畫質向量渲染。
+  - 控制工具列提供 Fit 自適應尺寸、放大/縮小、順時針 90° 旋轉切換、複製完整路徑與一鍵以作業系統預設 PDF 閱讀器開啟。
+- **微核心宿主與動態外掛載入引擎 (Plugin Host & Dynamic Loader)** (`src-tauri/src/plugins_ops.rs` & `src/plugins/loader.ts` & `src/plugins/hostSdk.ts`)：
+  - **外掛宣告規格 (`plugin.json`)**：定義標準外掛描述協定，支援外掛識別碼、版本、支援副檔名清單與進入點配置。
+  - **外掛宿主 SDK (`window.RFM`)**：向外掛提供共用之 React、ReactDOM、Tauri API 與格式化工具，徹底根除雙重 React 實例與 Hook 崩潰。
+  - **應用程式內建安裝與管理 UI**：設定視窗新增「安裝外掛 (.rfmp)」、「開啟外掛目錄」與「解除安裝」按鈕，支援系統檔案對話框選取外掛即時熱載入。
+  - **後端安全解壓與驗證**：實作 `cmd_install_plugin_package`、`cmd_list_installed_plugins`、`cmd_uninstall_plugin`，具備 Zip Slip 攻擊防護與安全 ID 驗證。
+- **獨立外掛一鍵打包腳本** (`scripts/build-plugins.ps1` & `scripts/build-plugins.sh` & `npm run package:plugins`)：
+  - 支援將 `plugins/` 目錄下的各個外掛一鍵自動打包為標準 `.rfmp` 發行套件包。
+
+### Refactored
+- **拆分並模組化所有內建預覽外掛** (`plugins/image/`, `plugins/media/`, `plugins/markdown/`)：
+  - 將既有的圖片、多媒體影音與 Markdown 預覽器徹底拆分至獨立外掛目錄，各具獨立之 `plugin.json`，實現 Monorepo 集中管理源碼、但產物徹底獨立之微核心架構。
+
 ## [0.2.1] - 2026-11-26
 
 ### Added
