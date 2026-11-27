@@ -12,6 +12,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "tauri": "tauri",
+    "build:local": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/local-build.ps1",
+    "build:local:sh": "bash ./scripts/local-build.sh",
     "package:plugins": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-plugins.ps1",
     "package:portable": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-release.ps1 -PortableOnly",
     "package:all": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-release.ps1"
