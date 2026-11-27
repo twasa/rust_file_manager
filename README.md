@@ -67,9 +67,10 @@
   - **PDF 文件預覽器 (`rfm.preview.pdf`) [全新獨立外掛]**：
     - 支援 PDF 文件即時檢視、高畫質向量渲染。
     - 控制列內建 **縮小 / 放大**、**Fit 自適應尺寸**、**順時針 90° 旋轉**、**複製路徑**與**一鍵以系統預設 PDF 閱讀器開啟**。
+    - 內建 WebView2 唯讀預覽模式（`msPdfEnableAsPreview`）與完整工具列抑制參數，徹底隱藏非必要之「分享 (Share)」與 Web 操作干擾，維持乾淨純粹的桌面預覽體驗。
     - 內建容錯提示防護卡片，防範受保護或損壞之 PDF 檔案。
   - **圖片與向量圖預覽器 (`rfm.preview.image`)**：支援 PNG, JPG, JPEG, WebP, GIF, SVG, BMP, ICO 等縮圖預覽、自適應 Fit / 原始尺寸縮放、即時解析度（寬×高 px）與檔案大小顯示。
-  - **音訊與影片原生播放器 (`rfm.preview.media`)**：支援 MP3, WAV, OGG, FLAC, MP4, WebM 等原生多媒體播放器、播放/暫停、時間進度條與音量調節。
+  - **音訊與影片原生播放器 (`rfm.preview.media`)**：支援 MP3, WAV, OGG, FLAC, MP4, WebM 等原生多媒體播放器、播放/暫停、時間進度條、音量調節與播放速度控制；透過 `controlsList="nodownload"` 與右鍵防護徹底消除本地檔案多餘之 Web「下載」選項，確保專業桌面控制項品質。
   - **Markdown 格式化排版外掛 (`rfm.preview.markdown`)**：支援 Markdown 即時結構排版（標題、粗斜體、引用、清單、GFM 規範表格）、原始碼 (Raw) 與排版視圖一鍵切換、全文一鍵複製。
   - **原始碼與文字高亮預覽器 (`builtin.code`)**：核心輕量通用備援外掛，支援常見程式語言（Rust, TS, JS, Python, JSON, CSS, Shell 等）行號對齊顯示、關鍵字語法上色與全文一鍵複製。
 - **一鍵批次外掛打包工具 (`scripts/build-plugins.ps1` & `scripts/build-plugins.sh`)**：

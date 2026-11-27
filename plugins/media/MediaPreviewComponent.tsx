@@ -83,6 +83,8 @@ export const MediaPreviewComponent: React.FC<PreviewPluginProps> = ({
             <video
               src={mediaSrc}
               controls
+              controlsList="nodownload"
+              onContextMenu={(e) => e.preventDefault()}
               onError={() => setLoadError(true)}
               className="w-full max-h-[50vh] object-contain"
               preload="metadata"
@@ -101,6 +103,8 @@ export const MediaPreviewComponent: React.FC<PreviewPluginProps> = ({
             <audio
               src={mediaSrc}
               controls
+              controlsList="nodownload"
+              onContextMenu={(e) => e.preventDefault()}
               onError={() => setLoadError(true)}
               className="w-full mt-1"
               preload="metadata"
