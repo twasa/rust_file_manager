@@ -337,12 +337,16 @@ Tauri 2.x 會將前端所有靜態資源（HTML / CSS / JS）直接嵌入編譯�
 ./scripts/build-release.ps1 -PortableOnly
 # 或使用 npm 指令: npm run package:portable
 
-# 2. 完整編譯「免安裝單一執行檔 + 平台所有安裝包 (.exe / .msi / .deb / .dmg)」
+# 2. 完整編譯系統原生安裝包 (Windows 下預設打包單一 MSI 安裝套件)
 ./scripts/build-release.ps1
 # 或使用 npm 指令: npm run package:all
 
-# 3. 僅打包指定格式的安裝包 (例如只打包 Windows MSI 安裝包)
+# 3. 僅打包指定格式的安裝包 (例如明確指定 Windows MSI 安裝包)
 ./scripts/build-release.ps1 -Target msi
+# 或使用 npm 指令: npm run package:msi
+
+# 4. 打包系統安裝包同時額外匯出免安裝單一執行檔
+./scripts/build-release.ps1 -IncludePortable
 ```
 
 **Bash / Zsh (`bash`)**：
@@ -350,8 +354,11 @@ Tauri 2.x 會將前端所有靜態資源（HTML / CSS / JS）直接嵌入編譯�
 # 1. 僅快速編譯免安裝單一執行檔
 ./scripts/build-release.sh --portable-only
 
-# 2. 完整編譯單一執行檔與當前系統所有安裝包 (.deb / .rpm / .AppImage / .dmg)
+# 2. 完整編譯當前系統原生安裝包 (Linux: .deb / .rpm / .AppImage; macOS: .dmg)
 ./scripts/build-release.sh
+
+# 3. 打包系統安裝包同時額外匯出免安裝單一執行檔
+./scripts/build-release.sh --include-portable
 ```
 
 #### macOS 安裝後解除 Gatekeeper 隔離屬性
