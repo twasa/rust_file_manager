@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **本地一鍵打包與部署腳本 (`scripts/local-build.ps1` & `scripts/local-build.sh` & `npm run build:local`)**：
+  - 支援自動編譯可攜式單一執行檔主體並打包所有獨立外掛套件包 (`.rfmp`)。
+  - 自動識別 `$env:RFM_HOME`（若未設定則自動預設為 `$HOME\RFM`），將免安裝主體執行檔與解壓後的外掛即時同步部署至目標工具目錄，開箱即用。
+  - 支援 `-Destination`（自訂目標路徑）、`-SkipBuild`（僅更新部署外掛）、`-SkipPlugins` 與 `-Clean` 參數。
+
 ## [0.3.0] - 2026-11-27
 
 ### Added

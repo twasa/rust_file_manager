@@ -300,7 +300,31 @@ Tauri 2.x 會將前端所有靜態資源（HTML / CSS / JS）直接嵌入編譯�
 | **Linux** | `rust-file-manager-portable-linux-x86_64` / `*.AppImage` (單一檔案免安裝) | Debian/Ubuntu `*.deb`、Fedora/RHEL `*.rpm`、`*.AppImage` |
 | **macOS** | `Rust File Manager.app` | Apple Disk Image `*.dmg` (支援 Intel `x64` 與 Apple Silicon `arm64`) |
 
-#### 使用自動化打包腳本（自動匯出至 `release-artifacts/` 並產生 `SHA256SUMS.txt`）
+#### 本地一鍵打包與部署至工具目錄 (`$env:RFM_HOME`)
+
+專案提供 `local-build.ps1` 與 `local-build.sh`，可一鍵編譯免安裝版主體執行檔、打包所有獨立外掛套件包（`.rfmp`），並自動同步部署至本機工具目錄（優先讀取 `$env:RFM_HOME`，若未配置則預設為 `$HOME\RFM`）：
+
+**PowerShell (`pwsh`)**：
+```powershell
+# 自動判定 $env:RFM_HOME (預設 $HOME\RFM) 進行完整主體與外掛打包部署
+./scripts/local-build.ps1
+# 或使用 npm 指令: npm run build:local
+
+# 自訂目標部署目錄
+./scripts/local-build.ps1 -Destination "D:\tools\RFM"
+
+# 僅重新打包並部署外掛（略過主體編譯，極速調試外掛）
+./scripts/local-build.ps1 -SkipBuild
+```
+
+**Bash / Zsh (`bash`)**：
+```bash
+# 自動判定 $RFM_HOME (預設 $HOME/RFM) 進行打包部署
+./scripts/local-build.sh
+# 或自訂目標目錄: ./scripts/local-build.sh /opt/RFM
+```
+
+#### 使用自動化發布打包腳本（自動匯出至 `release-artifacts/` 並產生 `SHA256SUMS.txt`）
 
 > **智慧依賴與磁碟防呆檢測**：打包腳本（`build-release.ps1` 與 `build-release.sh`）具備智慧檢核機制：
 > - **依賴防呆**：若檢測到尚未安裝 `node_modules` 或本機 `@tauri-apps/cli`，將自動觸發 `npm install` 補齊依賴後再進行打包。
