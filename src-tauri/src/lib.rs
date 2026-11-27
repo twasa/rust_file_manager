@@ -747,12 +747,23 @@ async fn cmd_read_plugin_file_content(
         .map_err(|e| e.to_string())?
 }
 
-/// 在 Windows 環境下初始化 WebView2 User Data Folder (UDF)
-/// 優先將資料夾導向執行檔同層之 data/webview（免安裝 Portable 模式），
-/// 若執行檔目錄為系統唯讀（如標準安裝於 Program Files），則自動依目錄 hash 隔離至 AppData，
-/// 杜絕多個安裝實例或開發版本共用同一 WebView2 本地快取與 LocalStorage 造成狀態污染。
+/// 在 Windows 環境下初始化 WebView2 環境配置：
+/// 1. 配置 WebView2 引數：啟用 PDF 唯讀預覽模式（msPdfEnableAsPreview），遮蔽原生分享與編輯按鈕
+/// 2. 初始化 User Data Folder (UDF)：優先導向可攜版 data/webview，遇唯讀則隔離至 AppData
 #[cfg(target_os = "windows")]
 pub fn init_webview2_environment() {
+    // 設置 WebView2 瀏覽器引數，啟用 PDF 唯讀預覽模式並停用分享/非必要工具列項目
+    let existing_args = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
+    let preview_flag = "--enable-features=msPdfEnableAsPreview";
+    if !existing_args.contains("msPdfEnableAsPreview") {
+        let new_args = if existing_args.is_empty() {
+            format!("{preview_flag} --disable-features=msEdgePdfShare,msPdfShare")
+        } else {
+            format!("{existing_args} {preview_flag} --disable-features=msEdgePdfShare,msPdfShare")
+        };
+        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", new_args);
+    }
+
     if std::env::var("WEBVIEW2_USER_DATA_FOLDER").is_err() {
         let app_dir = resolve_app_directory();
         let _ = fs::create_dir_all(&app_dir);
@@ -908,5 +919,10 @@ mod tests {
         init_webview2_environment();
         let val = std::env::var("WEBVIEW2_USER_DATA_FOLDER");
         assert!(val.is_ok(), "WEBVIEW2_USER_DATA_FOLDER should be configured on Windows");
+        let browser_args = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
+        assert!(
+            browser_args.contains("msPdfEnableAsPreview"),
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS should contain msPdfEnableAsPreview"
+        );
     }
 }

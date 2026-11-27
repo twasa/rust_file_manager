@@ -46,12 +46,12 @@ export const PdfPreviewComponent: React.FC<PreviewPluginProps> = ({
         if (!active) return;
         const pdfBlob = new Blob([blob], { type: "application/pdf" });
         objectUrl = URL.createObjectURL(pdfBlob);
-        setPdfUrl(`${objectUrl}#toolbar=0&navpanes=0`);
+        setPdfUrl(`${objectUrl}#toolbar=0&navpanes=0&scrollbar=0&statusbar=0&messages=0`);
         setLoading(false);
       })
       .catch((_err) => {
         if (!active) return;
-        setPdfUrl(`${assetUrl}#toolbar=0&navpanes=0`);
+        setPdfUrl(`${assetUrl}#toolbar=0&navpanes=0&scrollbar=0&statusbar=0&messages=0`);
         setLoading(false);
       });
 
@@ -202,6 +202,7 @@ export const PdfPreviewComponent: React.FC<PreviewPluginProps> = ({
                 src={pdfUrl}
                 title={entry.name}
                 onError={() => setLoadError(true)}
+                onContextMenu={(e) => e.preventDefault()}
                 style={{
                   transform: rotation > 0 ? `rotate(${rotation}deg)` : "none",
                   transformOrigin: "center center",
