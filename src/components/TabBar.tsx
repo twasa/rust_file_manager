@@ -7,6 +7,7 @@ import {
   Palette,
   Copy,
   XCircle,
+  RotateCcw,
 } from "lucide-react";
 import { TAB_COLORS, useAppStore } from "../store/useAppStore";
 import type { PaneId, TabItem } from "../types";
@@ -27,6 +28,7 @@ export const TabBar: React.FC<TabBarProps> = ({ pane, onDropFilesToTab }) => {
   const toggleTabLock = useAppStore((s) => s.toggleTabLock);
   const setTabColor = useAppStore((s) => s.setTabColor);
   const reorderTabs = useAppStore((s) => s.reorderTabs);
+  const clearTabHistory = useAppStore((s) => s.clearTabHistory);
 
   const [tabContextMenu, setTabContextMenu] = useState<{
     tab: TabItem;
@@ -215,6 +217,19 @@ export const TabBar: React.FC<TabBarProps> = ({ pane, onDropFilesToTab }) => {
             >
               <Copy size={14} className="text-sky-400" />
               <span>複製此分頁</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                clearTabHistory(pane, tabContextMenu.tab.id);
+                setTabContextMenu(null);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-800 text-slate-300 text-left"
+              title="清除此分頁已記錄的上一頁/下一頁歷史，僅保留目前路徑"
+            >
+              <RotateCcw size={14} className="text-cyan-400" />
+              <span>清除此分頁歷史 ({tabContextMenu.tab.history?.length || 1})</span>
             </button>
 
             <div className="my-1 border-t border-slate-800" />

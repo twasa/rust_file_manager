@@ -189,6 +189,31 @@ function getBaseName(p: string): string {
   return parts[parts.length - 1] || cleaned;
 }
 
+export const MAX_TAB_HISTORY = 50;
+
+export function sanitizeTabHistory(
+  history?: string[],
+  historyIndex?: number,
+  fallbackPath = "/"
+): { history: string[]; historyIndex: number } {
+  let list =
+    Array.isArray(history) && history.length > 0 ? [...history] : [fallbackPath];
+  let idx = typeof historyIndex === "number" ? historyIndex : list.length - 1;
+
+  if (list.length > MAX_TAB_HISTORY) {
+    const excess = list.length - MAX_TAB_HISTORY;
+    list = list.slice(excess);
+    idx = Math.max(0, idx - excess);
+  }
+  if (idx >= list.length) {
+    idx = list.length - 1;
+  }
+  if (idx < 0) {
+    idx = 0;
+  }
+  return { history: list, historyIndex: idx };
+}
+
 export function createNewTab(path: string, color = "none"): TabItem {
   const normalized = path.replace(/\\/g, "/");
   return {
@@ -288,6 +313,8 @@ interface AppStoreState {
   navigateTab: (pane: PaneId, path: string) => void;
   goBack: (pane: PaneId) => void;
   goForward: (pane: PaneId) => void;
+  clearAllTabHistory: () => void;
+  clearTabHistory: (pane: PaneId, tabId: string) => void;
   setTabSort: (pane: PaneId, field: SortField, direction?: SortDirection) => void;
   setTabViewMode: (pane: PaneId, mode: ViewMode) => void;
   setTabFilterQuery: (pane: PaneId, query: string) => void;
@@ -639,16 +666,22 @@ export const useAppStore = create<AppStoreState>()(
                 tabs: paneState.tabs.map((t) => {
                   if (t.id !== paneState.activeTabId) return t;
                   const slicedHistory = t.history.slice(0, t.historyIndex + 1);
-                  const nextHistory =
+                  let nextHistory =
                     slicedHistory[slicedHistory.length - 1] === path
                       ? slicedHistory
                       : [...slicedHistory, path];
+                  let nextIndex = nextHistory.length - 1;
+                  if (nextHistory.length > MAX_TAB_HISTORY) {
+                    const excess = nextHistory.length - MAX_TAB_HISTORY;
+                    nextHistory = nextHistory.slice(excess);
+                    nextIndex = Math.max(0, nextIndex - excess);
+                  }
                   return {
                     ...t,
                     path,
                     title: getBaseName(path),
                     history: nextHistory,
-                    historyIndex: nextHistory.length - 1,
+                    historyIndex: nextIndex,
                     filterQuery: "",
                     selectedPaths: [],
                     lastSelectedPath: null,
@@ -713,6 +746,44 @@ export const useAppStore = create<AppStoreState>()(
                 }),
               },
             },
+          };
+        }),
+
+      clearAllTabHistory: () =>
+        set((state) => {
+          const cleanPane = (paneState: PaneState): PaneState => ({
+            ...paneState,
+            tabs: paneState.tabs.map((t) => ({
+              ...t,
+              history: [t.path],
+              historyIndex: 0,
+            })),
+          });
+          return {
+            panes: {
+              left: cleanPane(state.panes.left),
+              right: cleanPane(state.panes.right),
+            },
+            refreshVersion: state.refreshVersion + 1,
+          };
+        }),
+
+      clearTabHistory: (pane, tabId) =>
+        set((state) => {
+          const paneState = state.panes[pane];
+          return {
+            panes: {
+              ...state.panes,
+              [pane]: {
+                ...paneState,
+                tabs: paneState.tabs.map((t) =>
+                  t.id === tabId
+                    ? { ...t, history: [t.path], historyIndex: 0 }
+                    : t
+                ),
+              },
+            },
+            refreshVersion: state.refreshVersion + 1,
           };
         }),
 
@@ -906,7 +977,30 @@ export const useAppStore = create<AppStoreState>()(
             : state.keybindings,
           panes:
             cfg.panes && cfg.panes.left && cfg.panes.right
-              ? cfg.panes
+              ? {
+                  left: {
+                    ...cfg.panes.left,
+                    tabs: (cfg.panes.left.tabs || []).map((t: TabItem) => {
+                      const { history, historyIndex } = sanitizeTabHistory(
+                        t.history,
+                        t.historyIndex,
+                        t.path
+                      );
+                      return { ...t, history, historyIndex };
+                    }),
+                  },
+                  right: {
+                    ...cfg.panes.right,
+                    tabs: (cfg.panes.right.tabs || []).map((t: TabItem) => {
+                      const { history, historyIndex } = sanitizeTabHistory(
+                        t.history,
+                        t.historyIndex,
+                        t.path
+                      );
+                      return { ...t, history, historyIndex };
+                    }),
+                  },
+                }
               : state.panes,
           refreshVersion: state.refreshVersion + 1,
         }));
@@ -961,9 +1055,45 @@ export const useAppStore = create<AppStoreState>()(
           ...currentState.queueRetention,
           ...(p.queueRetention || {}),
         };
+        const sanitizeTabs = (tabs?: TabItem[]): TabItem[] | undefined => {
+          if (!Array.isArray(tabs)) return undefined;
+          return tabs.map((t) => {
+            const { history, historyIndex } = sanitizeTabHistory(
+              t.history,
+              t.historyIndex,
+              t.path
+            );
+            return { ...t, history, historyIndex };
+          });
+        };
+
+        const mergedPanes = p.panes
+          ? {
+              left: {
+                ...p.panes.left,
+                tabs:
+                  sanitizeTabs(p.panes.left?.tabs) ||
+                  currentState.panes.left.tabs,
+                activeTabId:
+                  p.panes.left?.activeTabId ||
+                  currentState.panes.left.activeTabId,
+              },
+              right: {
+                ...p.panes.right,
+                tabs:
+                  sanitizeTabs(p.panes.right?.tabs) ||
+                  currentState.panes.right.tabs,
+                activeTabId:
+                  p.panes.right?.activeTabId ||
+                  currentState.panes.right.activeTabId,
+              },
+            }
+          : currentState.panes;
+
         return {
           ...currentState,
           ...p,
+          panes: mergedPanes,
           fontSettings: mergedFontSettings,
           queueRetention: mergedQueueRetention,
           keybindings: mergedKeybindings,

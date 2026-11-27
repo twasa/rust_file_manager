@@ -16,6 +16,7 @@ import {
   Boxes,
   FolderOpen,
   PackagePlus,
+  History,
 } from "lucide-react";
 import {
   apiClearLogs,
@@ -91,6 +92,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const updateKeybinding = useAppStore((s) => s.updateKeybinding);
   const resetKeybindings = useAppStore((s) => s.resetKeybindings);
   const resetAllSettings = useAppStore((s) => s.resetAllSettings);
+  const clearAllTabHistory = useAppStore((s) => s.clearAllTabHistory);
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
   const setConflictStrategy = useAppStore((s) => s.setConflictStrategy);
   const confirmDelete = useAppStore((s) => s.confirmDelete);
@@ -1051,6 +1053,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={handleWebFileInputChange}
                     className="hidden"
                   />
+                </div>
+              </div>
+
+              {/* 分頁瀏覽歷史與隱私保護 */}
+              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold text-slate-200 text-xs flex items-center gap-2">
+                    <History size={16} className="text-cyan-400" />
+                    <span>分頁瀏覽歷史與隱私保護 (Navigation History & Privacy)</span>
+                  </div>
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono">
+                    上限: 50 筆/分頁
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  各分頁在切換資料夾時會自動記錄路徑供「上一頁/下一頁」使用。系統已內建單一分頁最多保留 50 筆上限保護（FIFO 自動淘汰）。若欲清除歷史或精簡設定檔，可隨時一鍵清空所有分頁之歷史紀錄。
+                </p>
+
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      clearAllTabHistory();
+                      await flushAutoSave();
+                      onNotify?.("已成功清除所有分頁的瀏覽歷史紀錄");
+                      setConfigStatusMsg({
+                        type: "ok",
+                        text: "已清空所有分頁之導航歷程，並同步寫入磁碟 settings.json",
+                      });
+                    }}
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-200 hover:text-rose-300 border border-slate-700 hover:border-rose-500/40 text-xs font-medium transition-colors"
+                  >
+                    <Trash2 size={14} className="text-rose-400" />
+                    <span>清除所有分頁歷史紀錄</span>
+                  </button>
                 </div>
               </div>
             </div>
