@@ -22,15 +22,46 @@ export const PdfPreviewComponent: React.FC<PreviewPluginProps> = ({
   const [rotation, setRotation] = useState(0);
   const [fit, setFit] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    let active = true;
+    let objectUrl: string | null = null;
     setLoadError(false);
+    setLoading(true);
     setRotation(0);
     setFit(true);
     setZoom(1);
-  }, [entry.path]);
 
-  const pdfSrc = `${convertFileSrc(entry.path)}#toolbar=0&navpanes=0`;
+    const assetUrl = convertFileSrc(entry.path);
+
+    // 優先以 Blob URL 提供最穩定相容之 PDF 預覽環境，若失敗則回退至 asset URL
+    fetch(assetUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error("fetch asset failed");
+        return res.blob();
+      })
+      .then((blob) => {
+        if (!active) return;
+        const pdfBlob = new Blob([blob], { type: "application/pdf" });
+        objectUrl = URL.createObjectURL(pdfBlob);
+        setPdfUrl(`${objectUrl}#toolbar=0&navpanes=0`);
+        setLoading(false);
+      })
+      .catch((_err) => {
+        if (!active) return;
+        setPdfUrl(`${assetUrl}#toolbar=0&navpanes=0`);
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [entry.path]);
 
   const handleZoomIn = () => {
     setFit(false);
@@ -136,7 +167,12 @@ export const PdfPreviewComponent: React.FC<PreviewPluginProps> = ({
 
       {/* PDF 檢視畫布 */}
       <div className="flex-1 overflow-auto flex items-center justify-center p-2 min-h-0 bg-slate-950 relative">
-        {loadError ? (
+        {loading && !pdfUrl ? (
+          <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
+            <div className="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs">正在載入 PDF 預覽...</span>
+          </div>
+        ) : loadError ? (
           <div className="flex flex-col items-center justify-center text-center p-6 max-w-md bg-slate-900/80 rounded-xl border border-slate-800 text-slate-300 gap-3">
             <AlertCircle size={32} className="text-red-400" />
             <div className="text-sm font-semibold text-slate-200">無法預覽此 PDF 文件</div>
@@ -160,17 +196,19 @@ export const PdfPreviewComponent: React.FC<PreviewPluginProps> = ({
               transformOrigin: "top center",
             }}
           >
-            <iframe
-              key={`${entry.path}-${rotation}`}
-              src={pdfSrc}
-              title={entry.name}
-              onError={() => setLoadError(true)}
-              style={{
-                transform: rotation > 0 ? `rotate(${rotation}deg)` : "none",
-                transformOrigin: "center center",
-              }}
-              className="w-full h-full min-h-[400px] border-0 rounded bg-white shadow-2xl"
-            />
+            {pdfUrl && (
+              <iframe
+                key={`${entry.path}-${rotation}`}
+                src={pdfUrl}
+                title={entry.name}
+                onError={() => setLoadError(true)}
+                style={{
+                  transform: rotation > 0 ? `rotate(${rotation}deg)` : "none",
+                  transformOrigin: "center center",
+                }}
+                className="w-full h-full min-h-[400px] border-0 rounded bg-white shadow-2xl"
+              />
+            )}
           </div>
         )}
       </div>

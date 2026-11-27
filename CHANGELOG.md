@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 自動識別 `$env:RFM_HOME`（若未設定則自動預設為 `$HOME\RFM`），將單一主體執行檔 (`rfm.exe`) 與解壓後的外掛即時同步部署至目標工具目錄（`plugins/`），開箱即用且自動清理舊版多餘產物。
   - 支援 `-Destination`（自訂目標路徑）、`-SkipBuild`（僅更新部署外掛）、`-SkipPlugins` 與 `-Clean` 參數。
 
+### Fixed
+- **修復 PDF 預覽因缺少 CSP `frame-src` 導致「此內容已被封鎖」問題** (`src-tauri/tauri.conf.json` & `plugins/pdf/PdfPreviewComponent.tsx`)：
+  - 在 `tauri.conf.json` 的 CSP 規則中補足 `frame-src` 與 `object-src`（允許 `asset:`、`http://asset.localhost`、`blob:` 與 `data:`），消除 WebView2 / Chromium 對內嵌框架載入 PDF 的安全阻斷。
+  - 擴充 `assetProtocol.scope` 加入 Windows 磁碟代號模式（`"?:/**"`、`"?:\\**"` 等），解除跨磁碟檔案讀取限制。
+  - 在 `PdfPreviewComponent` 中升級採用雙重載入機制：優先透過 `fetch(assetUrl)` 轉換為標準 `blob:` URL 提供最順暢相容的 WebView PDF 瀏覽，並提供載入動畫狀態反饋。
+
 ## [0.3.0] - 2026-11-27
 
 ### Added
