@@ -53,15 +53,26 @@
 - **檔案雜湊校驗碼分頁 (Checksums)**：針對單一檔案提供一鍵計算 **MD5**、**SHA-256**、**CRC32** 完整性校驗碼，並支援獨立一鍵複製與耗時統計。
 - **底部快捷工具列**：視窗底部內建「在檔案總管顯示」、「開啟終端機」與「以預設程式開啟」等原生捷徑按鈕。
 
-### 7. 微核心外掛架構 (Plugin Architecture) 與豐富內容預覽面板 (`src/plugins/` & `src/components/PreviewPanel.tsx`)
-- **微核心隨選載入 (Micro-Kernel Plugin Architecture)**：
-  - 各預覽模組遵循標準 `PreviewPlugin` 介面，透過 `PluginRegistry` 統一調度，結合 Vite 與 React 隨選程式碼分割（Code-Splitting）。
-  - **設定中可自訂啟用/停用**：於「設定 -> 外掛功能管理」中，可自由切換各預覽外掛開關，停用之外掛零載入、零記憶體佔用。
-- **首波四大豐富預覽外掛**：
-  - **圖片與向量圖預覽器 (`builtin.image`)**：支援 PNG, JPG, JPEG, WebP, GIF, SVG, BMP, ICO 等縮圖預覽、自適應 Fit / 原始尺寸縮放、即時解析度（寬×高 px）與檔案大小顯示。
-  - **音訊與影片原生播放器 (`builtin.media`)**：支援 MP3, WAV, OGG, FLAC, MP4, WebM 等原生多媒體播放器、播放/暫停、時間進度條與音量調節。
-  - **Markdown 格式化排版外掛 (`builtin.markdown`)**：支援 Markdown 即時結構排版（標題、粗斜體、引用、清單、GFM 規範表格）、原始碼 (Raw) 與排版視圖一鍵切換、全文一鍵複製。
-  - **原始碼與文字高亮預覽器 (`builtin.code`)**：支援常見程式語言（Rust, TS, JS, Python, JSON, CSS, Shell 等）行號對齊顯示、關鍵字語法上色與全文一鍵複製。
+### 7. 微核心外掛架構 (Plugin Architecture) 與豐富內容預覽面板 (`plugins/`, `src/plugins/` & `src/components/PreviewPanel.tsx`)
+- **微核心宿主與模組化獨立外掛體系 (Micro-Kernel Plugin Architecture)**：
+  - **集中維護，產物獨立**：所有外掛源碼集中於 `plugins/` 目錄（Monorepo 管理，免除一個外掛一個 repo 的繁瑣維護負擔），但建置時產物徹底獨立，使用者亦可單獨下載或安裝特定外掛。
+  - **各外掛標準清單宣告 (`plugin.json`)**：定義外掛識別碼 (`id`)、名稱、版本、支援副檔名清單 (`extensions`)、類別與進入點。
+  - **全域宿主 SDK (`window.RFM` & `src/plugins/hostSdk.ts`)**：提供共用之 React、ReactDOM、Tauri API 與格式化函式，徹底根絕外掛自行打包 React 引發的雙重實例與 Hooks 崩潰問題。
+  - **動態熱插拔安裝與載入器 (`src/plugins/loader.ts`)**：
+    - 啟動時自動掃描 Portable 目錄或 AppData 目錄下的 `plugins/`，動態註冊外部外掛。
+    - 於「設定 -> 外掛功能管理」中內建「**安裝外掛 (.rfmp)**」按鈕，支援系統檔案對話框選取外掛包，後端自動經由 Zip Slip 安全防護解壓並即時熱載入生效，**完全無需重啟軟體**。
+    - 外部外掛卡片附帶「**解除安裝**」功能與「**開啟外掛目錄**」捷徑。
+- **五大豐富預覽外掛**：
+  - **PDF 文件預覽器 (`rfm.preview.pdf`) [全新獨立外掛]**：
+    - 支援 PDF 文件即時檢視、高畫質向量渲染。
+    - 控制列內建 **縮小 / 放大**、**Fit 自適應尺寸**、**順時針 90° 旋轉**、**複製路徑**與**一鍵以系統預設 PDF 閱讀器開啟**。
+    - 內建容錯提示防護卡片，防範受保護或損壞之 PDF 檔案。
+  - **圖片與向量圖預覽器 (`rfm.preview.image`)**：支援 PNG, JPG, JPEG, WebP, GIF, SVG, BMP, ICO 等縮圖預覽、自適應 Fit / 原始尺寸縮放、即時解析度（寬×高 px）與檔案大小顯示。
+  - **音訊與影片原生播放器 (`rfm.preview.media`)**：支援 MP3, WAV, OGG, FLAC, MP4, WebM 等原生多媒體播放器、播放/暫停、時間進度條與音量調節。
+  - **Markdown 格式化排版外掛 (`rfm.preview.markdown`)**：支援 Markdown 即時結構排版（標題、粗斜體、引用、清單、GFM 規範表格）、原始碼 (Raw) 與排版視圖一鍵切換、全文一鍵複製。
+  - **原始碼與文字高亮預覽器 (`builtin.code`)**：核心輕量通用備援外掛，支援常見程式語言（Rust, TS, JS, Python, JSON, CSS, Shell 等）行號對齊顯示、關鍵字語法上色與全文一鍵複製。
+- **一鍵批次外掛打包工具 (`scripts/build-plugins.ps1` & `scripts/build-plugins.sh`)**：
+  - 執行 `npm run package:plugins`，一鍵掃描 `plugins/` 下各外掛並打包為標準 `.rfmp`（相容 zip）發行套件包至 `release-artifacts/plugins/`。
 - **預設 5 MB 預覽上限與自訂設定 (Default 5MB Preview Limit & User Configurable)**：
   - 後端 `read_file_preview` 與多媒體預覽預設上限全面調升為 **5 MB**（相容普遍多媒體與豐富格式檔案）。
   - **設定視窗自主配置**：於「設定 -> 外掛功能管理」中提供快捷預設按鈕（1 MB、2 MB、5 MB 預設、10 MB、20 MB、50 MB、100 MB），使用者可依硬體效能彈性配置，並持久化寫入 `settings.json`。

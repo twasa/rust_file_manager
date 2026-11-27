@@ -5,6 +5,7 @@ import { imagePreviewPlugin } from "./builtin/ImagePreviewPlugin";
 import { mediaPreviewPlugin } from "./builtin/MediaPreviewPlugin";
 import { markdownPreviewPlugin } from "./builtin/MarkdownPreviewPlugin";
 import { codePreviewPlugin } from "./builtin/CodePreviewPlugin";
+import { pdfPlugin } from "../../plugins/pdf";
 import type { FileEntry } from "../types";
 
 describe("Plugin Registry & Preview Plugins", () => {
@@ -22,13 +23,14 @@ describe("Plugin Registry & Preview Plugins", () => {
     kind,
   });
 
-  it("registers and lists all builtin plugins", () => {
+  it("registers and lists all builtin and modular plugins", () => {
     const plugins = pluginRegistry.getAllPlugins();
     const ids = plugins.map((p) => p.id);
     expect(ids).toContain("builtin.image");
     expect(ids).toContain("builtin.media");
     expect(ids).toContain("builtin.markdown");
     expect(ids).toContain("builtin.code");
+    expect(ids).toContain("rfm.preview.pdf");
   });
 
   it("correctly matches image entry to image plugin", () => {
@@ -53,6 +55,11 @@ describe("Plugin Registry & Preview Plugins", () => {
     expect(pluginRegistry.findMatchingPlugin(mdEntry, {})?.id).toBe("builtin.markdown");
   });
 
+  it("correctly matches pdf entries to pdf plugin", () => {
+    const pdfEntry = createMockEntry("spec.pdf", "pdf", "document");
+    expect(pluginRegistry.findMatchingPlugin(pdfEntry, {})?.id).toBe("rfm.preview.pdf");
+  });
+
   it("correctly matches source code entries to code plugin", () => {
     const rsEntry = createMockEntry("main.rs", "rs", "code");
     expect(pluginRegistry.findMatchingPlugin(rsEntry, {})?.id).toBe("builtin.code");
@@ -70,13 +77,45 @@ describe("Plugin Registry & Preview Plugins", () => {
     });
     expect(matchedWithDisabled?.id).not.toBe("builtin.markdown");
 
+    // 當停用 pdf 外掛時，pdf 檔案不應匹配 pdf 外掛
+    const pdfEntry = createMockEntry("report.pdf", "pdf", "document");
+    const disabledPdf = pluginRegistry.findMatchingPlugin(pdfEntry, {
+      "rfm.preview.pdf": false,
+    });
+    expect(disabledPdf?.id).not.toBe("rfm.preview.pdf");
+
     // 當所有外掛皆被停用時，匹配結果應為 null
     const allDisabled = {
       "builtin.image": false,
       "builtin.media": false,
       "builtin.markdown": false,
       "builtin.code": false,
+      "rfm.preview.pdf": false,
     };
     expect(pluginRegistry.findMatchingPlugin(mdEntry, allDisabled)).toBeNull();
+  });
+
+  it("supports dynamic registration and unregistration", () => {
+    const testPluginId = "test.dynamic.plugin";
+    expect(pluginRegistry.getPlugin(testPluginId)).toBeUndefined();
+
+    pluginRegistry.register({
+      id: testPluginId,
+      name: "動態外掛測試",
+      description: "測試動態註冊",
+      version: "1.0.0",
+      category: "viewer",
+      defaultEnabled: true,
+      supports: (e) => e.extension === "test",
+      component: () => null,
+    });
+
+    expect(pluginRegistry.getPlugin(testPluginId)).toBeDefined();
+    const testEntry = createMockEntry("sample.test", "test", "file");
+    expect(pluginRegistry.findMatchingPlugin(testEntry, {})?.id).toBe(testPluginId);
+
+    pluginRegistry.unregister(testPluginId);
+    expect(pluginRegistry.getPlugin(testPluginId)).toBeUndefined();
+    expect(pluginRegistry.findMatchingPlugin(testEntry, {})).toBeNull();
   });
 });

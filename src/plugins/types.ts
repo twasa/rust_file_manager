@@ -1,6 +1,27 @@
 import React from "react";
 import type { FileEntry, FilePreviewData } from "../types";
 
+export interface PluginManifest {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  category: "viewer" | "tool";
+  author?: string;
+  extensions: string[];
+  main: string;
+  styles?: string;
+  icon?: string;
+}
+
+export interface InstalledPluginInfo extends PluginManifest {
+  dirPath: string;
+  mainFile: string;
+  mainFilePath: string;
+  styleFilePath?: string;
+  isBuiltin: boolean;
+}
+
 export interface PreviewPluginProps {
   entry: FileEntry;
   previewData: FilePreviewData | null;
@@ -19,6 +40,8 @@ export interface PreviewPlugin {
   defaultEnabled: boolean;
   supports: (entry: FileEntry) => boolean;
   component: React.ComponentType<PreviewPluginProps>;
+  extensions?: string[];
+  isExternal?: boolean;
 }
 
 export interface PluginRegistryState {

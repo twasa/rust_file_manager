@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
+import type { InstalledPluginInfo } from "./plugins/types";
 import type {
   BatchRenameExecutionResult,
   BatchRenamePreviewItem,
@@ -444,6 +445,49 @@ export async function apiStartNativeDrag(
     ).catch(() => {});
   }
 }
+
+export async function apiGetPluginsDirectory(): Promise<string> {
+  if (!isTauriRuntime()) return "D:/devops_workspace/private/rust_file_manager/plugins";
+  return invoke<string>("cmd_get_plugins_directory");
+}
+
+export async function apiListInstalledPlugins(): Promise<InstalledPluginInfo[]> {
+  if (!isTauriRuntime()) return [];
+  return invoke<InstalledPluginInfo[]>("cmd_list_installed_plugins");
+}
+
+export async function apiInstallPluginPackage(
+  archivePath: string
+): Promise<InstalledPluginInfo> {
+  if (!isTauriRuntime()) {
+    throw new Error("Web preview 不支援安裝外掛");
+  }
+  return invoke<InstalledPluginInfo>("cmd_install_plugin_package", {
+    archivePath,
+  });
+}
+
+export async function apiInstallPluginWithDialog(): Promise<InstalledPluginInfo | null> {
+  if (!isTauriRuntime()) return null;
+  return invoke<InstalledPluginInfo | null>("cmd_install_plugin_with_dialog");
+}
+
+export async function apiUninstallPlugin(pluginId: string): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  return invoke<boolean>("cmd_uninstall_plugin", { pluginId });
+}
+
+export async function apiReadPluginFileContent(
+  pluginId: string,
+  relativePath: string
+): Promise<string> {
+  if (!isTauriRuntime()) return "";
+  return invoke<string>("cmd_read_plugin_file_content", {
+    pluginId,
+    relativePath,
+  });
+}
+
 
 
 

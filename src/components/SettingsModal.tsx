@@ -14,6 +14,8 @@ import {
   RefreshCw,
   Trash2,
   Boxes,
+  FolderOpen,
+  PackagePlus,
 } from "lucide-react";
 import {
   apiClearLogs,
@@ -21,13 +23,19 @@ import {
   apiGetDefaultConfigPath,
   apiGetLogFilePath,
   apiGetLogLevel,
+  apiGetPluginsDirectory,
   apiImportConfigWithDialog,
+  apiInstallPluginWithDialog,
   apiReadLogs,
   apiRevealInShell,
   apiSetLogFormat,
   apiSetLogLevel,
   isTauriRuntime,
 } from "../api";
+import {
+  loadSingleExternalPlugin,
+  uninstallPluginById,
+} from "../plugins/loader";
 import {
   AVAILABLE_FONTS,
   useAppStore,
@@ -212,6 +220,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     };
     reader.readAsText(file, "utf-8");
     e.target.value = "";
+  };
+
+  const handleInstallPluginWithDialog = async () => {
+    try {
+      const installed = await apiInstallPluginWithDialog();
+      if (installed) {
+        await loadSingleExternalPlugin(installed);
+        onNotify?.(`外掛「${installed.name}」已成功安裝並即時生效！`);
+      }
+    } catch (err) {
+      onNotify?.(`安裝外掛失敗: ${String(err)}`);
+    }
+  };
+
+  const handleOpenPluginsFolder = async () => {
+    try {
+      const dir = await apiGetPluginsDirectory();
+      await apiRevealInShell(dir);
+    } catch (err) {
+      onNotify?.(`開啟外掛目錄失敗: ${String(err)}`);
+    }
+  };
+
+  const handleUninstallPlugin = async (id: string, name: string) => {
+    try {
+      const ok = await uninstallPluginById(id);
+      if (ok) {
+        onNotify?.(`已成功解除安裝外掛「${name}」`);
+      }
+    } catch (err) {
+      onNotify?.(`解除安裝外掛失敗: ${String(err)}`);
+    }
   };
 
   return (
@@ -780,14 +820,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {activeTab === "plugins" && (
             <div className="space-y-4">
-              <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-lg text-xs flex items-center justify-between">
+              <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-lg text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <span className="font-semibold text-slate-200">
                     微核心外掛管理 (Micro-Kernel Plugin Architecture)
                   </span>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    所有預覽模組均採動態按需載入。停用不需要的外掛可維持最極簡的記憶體佔用與最輕量的執行環境。
+                    所有預覽模組均採動態按需載入。支援從本機安裝獨立外掛套件包 (.rfmp / .zip)。
                   </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleInstallPluginWithDialog}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs shadow transition-colors"
+                  >
+                    <PackagePlus size={13} />
+                    安裝外掛 (.rfmp)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenPluginsFolder}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs border border-slate-700 transition-colors"
+                    title="在檔案總管開啟外掛資料夾"
+                  >
+                    <FolderOpen size={13} />
+                    外掛目錄
+                  </button>
                 </div>
               </div>
 
@@ -846,7 +905,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="p-3.5 rounded-lg border border-slate-800 bg-slate-900/40 flex items-center justify-between hover:bg-slate-900/70 transition-colors"
                     >
                       <div className="space-y-1 pr-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-slate-200 text-xs">
                             {plugin.name}
                           </span>
@@ -856,22 +915,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono">
                             {plugin.id}
                           </span>
+                          {plugin.extensions && plugin.extensions.length > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-emerald-400 font-mono">
+                              {plugin.extensions.slice(0, 4).join(", ")}
+                              {plugin.extensions.length > 4 ? "..." : ""}
+                            </span>
+                          )}
+                          {plugin.isExternal && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 border border-purple-500/30 text-purple-300 font-mono">
+                              外部外掛
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-slate-400 leading-relaxed">
                           {plugin.description}
                         </p>
                       </div>
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={isEnabled}
-                          onChange={() =>
-                            setPluginEnabled(plugin.id, !isEnabled)
-                          }
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
-                      </label>
+                      <div className="flex items-center gap-3 shrink-0">
+                        {plugin.isExternal && (
+                          <button
+                            type="button"
+                            onClick={() => handleUninstallPlugin(plugin.id, plugin.name)}
+                            className="p-1.5 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
+                            title="解除安裝此外部外掛"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={isEnabled}
+                            onChange={() =>
+                              setPluginEnabled(plugin.id, !isEnabled)
+                            }
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                        </label>
+                      </div>
                     </div>
                   );
                 })}

@@ -1,0 +1,12 @@
+{
+  "id": "rfm.preview.pdf",
+  "name": "PDF 文件預覽器",
+  "version": "1.0.0",
+  "description": "支援 PDF 文件多頁瀏覽、縮放、旋轉、高畫質向量渲染與快速跳轉",
+  "category": "viewer",
+  "author": "William Wang",
+  "extensions": [
+    ".pdf"
+  ],
+  "main": "index.js"
+}

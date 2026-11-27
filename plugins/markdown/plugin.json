@@ -1,0 +1,15 @@
+{
+  "id": "rfm.preview.markdown",
+  "name": "Markdown 結構排版檢視器",
+  "version": "1.0.0",
+  "description": "支援 Markdown 即時排版、GFM 規範表格、標題清單上色與原始碼一鍵切換",
+  "category": "viewer",
+  "author": "William Wang",
+  "extensions": [
+    ".md",
+    ".markdown",
+    ".mdown",
+    ".mkd"
+  ],
+  "main": "index.js"
+}
