@@ -1,10 +1,11 @@
 <#
 .SYNOPSIS
-    Rust File Manager 本地打包與部署腳本 (Local Build & Deploy Script)
+    Rust File Manager 本地打包與部署腳本 (Build & Deploy to Local RFM_HOME)
 
 .DESCRIPTION
-    一鍵編譯前端與 Tauri 後端免安裝可攜版主體，打包所有獨立外掛套件包 (.rfmp)，
-    並自動同步複製部署至指定的本機工具目錄 ($env:RFM_HOME 或預設 $HOME\RFM)。
+    一鍵編譯前端與 Tauri 後端免安裝可攜版主體，打包所有獨立外掛，
+    並自動部署至指定的本機工具目錄 ($env:RFM_HOME 或預設 $HOME\RFM)。
+    目標目錄保持極簡乾淨：僅包含單一可執行檔 (rfm.exe / rfm) 與 plugins/ 目錄。
 
 .PARAMETER Destination
     手動指定目標部署目錄。若未指定，則優先讀取 $env:RFM_HOME 環境變數；
@@ -43,7 +44,7 @@ $TargetDir = if (-not [string]::IsNullOrWhiteSpace($Destination)) {
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Rust File Manager 本地打包與部署 (Local Build & Deploy)" -ForegroundColor Cyan
+Write-Host " Rust File Manager 本地打包與部署 (build-local)" -ForegroundColor Cyan
 Write-Host " 專案根目錄: $ProjectRoot" -ForegroundColor Gray
 Write-Host " 目標部署目錄: $TargetDir" -ForegroundColor Yellow
 if (-not [string]::IsNullOrWhiteSpace($env:RFM_HOME)) {
@@ -60,23 +61,36 @@ if (-not (Test-Path $TargetDir)) {
 }
 
 $PluginsDestDir = Join-Path $TargetDir "plugins"
-$PluginsPkgDestDir = Join-Path $TargetDir "plugins-packages"
+
+# 清理舊版遺留產物 (例如先前的 rust-file-manager*.exe 與 plugins-packages 目錄)
+$LegacyExes = @(
+    (Join-Path $TargetDir "rust-file-manager.exe"),
+    (Join-Path $TargetDir "rust-file-manager-portable-windows-x64.exe"),
+    (Join-Path $TargetDir "rust-file-manager")
+)
+foreach ($legacyExe in $LegacyExes) {
+    if (Test-Path $legacyExe) {
+        Remove-Item -Path $legacyExe -Force -ErrorAction SilentlyContinue
+    }
+}
+$LegacyPkgDir = Join-Path $TargetDir "plugins-packages"
+if (Test-Path $LegacyPkgDir) {
+    Remove-Item -Path $LegacyPkgDir -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 if ($Clean) {
     Write-Host "[INFO] 正在清理目標目錄舊版產物..." -ForegroundColor Yellow
     if (Test-Path $PluginsDestDir) {
         Remove-Item -Path $PluginsDestDir -Recurse -Force
     }
-    if (Test-Path $PluginsPkgDestDir) {
-        Remove-Item -Path $PluginsPkgDestDir -Recurse -Force
+    $CleanExe = if ($IsWindows) { Join-Path $TargetDir "rfm.exe" } else { Join-Path $TargetDir "rfm" }
+    if (Test-Path $CleanExe) {
+        Remove-Item -Path $CleanExe -Force
     }
 }
 
 if (-not (Test-Path $PluginsDestDir)) {
     New-Item -ItemType Directory -Path $PluginsDestDir -Force | Out-Null
-}
-if (-not (Test-Path $PluginsPkgDestDir)) {
-    New-Item -ItemType Directory -Path $PluginsPkgDestDir -Force | Out-Null
 }
 
 # 2. 打包本體執行檔 (Portable Release)
@@ -104,10 +118,8 @@ if (-not $SkipBuild) {
         }
 
         if (Test-Path $sourceExe) {
-            $destExe = Join-Path $TargetDir "rust-file-manager.exe"
-            $destPortableExe = Join-Path $TargetDir "rust-file-manager-portable-windows-x64.exe"
+            $destExe = Join-Path $TargetDir "rfm.exe"
             Copy-Item -Path $sourceExe -Destination $destExe -Force
-            Copy-Item -Path $sourceExe -Destination $destPortableExe -Force
             Write-Host "   ✔ 已複製主體執行檔至: $destExe" -ForegroundColor Cyan
             $CopiedCore = $true
         }
@@ -121,7 +133,7 @@ if (-not $SkipBuild) {
         }
 
         if (Test-Path $sourceBin) {
-            $destBin = Join-Path $TargetDir "rust-file-manager"
+            $destBin = Join-Path $TargetDir "rfm"
             Copy-Item -Path $sourceBin -Destination $destBin -Force
             if (Get-Command chmod -ErrorAction SilentlyContinue) {
                 chmod +x $destBin
@@ -140,7 +152,7 @@ if (-not $SkipBuild) {
 
 # 3. 打包所有獨立外掛
 if (-not $SkipPlugins) {
-    Write-Host "`n>>> [2/2] 開始打包所有獨立外掛 (.rfmp 套件包)..." -ForegroundColor Green
+    Write-Host "`n>>> [2/2] 開始打包所有獨立外掛並同步至 $PluginsDestDir..." -ForegroundColor Green
     $BuildPluginsScript = Join-Path $ScriptDir "build-plugins.ps1"
     if (-not (Test-Path $BuildPluginsScript)) {
         throw "找不到外掛打包腳本: $BuildPluginsScript"
@@ -150,13 +162,6 @@ if (-not $SkipPlugins) {
     & $BuildPluginsScript -OutputDir $ArtifactPluginsDir
     if ($LASTEXITCODE -ne 0) {
         throw "外掛打包失敗，退出碼: $LASTEXITCODE"
-    }
-
-    # 複製 .rfmp 安裝套件至 $TargetDir/plugins-packages
-    $rfmpFiles = Get-ChildItem -Path $ArtifactPluginsDir -Filter "*.rfmp"
-    foreach ($rfmp in $rfmpFiles) {
-        Copy-Item -Path $rfmp.FullName -Destination $PluginsPkgDestDir -Force
-        Write-Host "   ✔ [套件包] $($rfmp.Name) -> $PluginsPkgDestDir" -ForegroundColor Cyan
     }
 
     # 解壓縮並同步外掛至 $TargetDir/plugins/<plugin_id>/ 供開箱即用
@@ -201,10 +206,9 @@ Write-Host "`n==========================================================" -Foreg
 Write-Host " 本地打包與部署完成！" -ForegroundColor Green
 Write-Host " 部署目錄: $TargetDir" -ForegroundColor Green
 if ($IsWindows) {
-    Write-Host " 啟動執行檔: $(Join-Path $TargetDir 'rust-file-manager.exe')" -ForegroundColor Green
+    Write-Host " 啟動執行檔: $(Join-Path $TargetDir 'rfm.exe')" -ForegroundColor Green
 } else {
-    Write-Host " 啟動執行檔: $(Join-Path $TargetDir 'rust-file-manager')" -ForegroundColor Green
+    Write-Host " 啟動執行檔: $(Join-Path $TargetDir 'rfm')" -ForegroundColor Green
 }
 Write-Host " 外掛目錄: $PluginsDestDir" -ForegroundColor Green
-Write-Host " 外掛安裝包: $PluginsPkgDestDir" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# local-build.sh — Rust File Manager 本地打包與部署腳本 (Bash 版)
+# build-local.sh — Rust File Manager 本地打包與部署腳本 (Bash 版)
 # ==============================================================================
 set -euo pipefail
 
@@ -18,15 +18,18 @@ else
 fi
 
 echo "=========================================================="
-echo " Rust File Manager 本地打包與部署 (Local Build & Deploy)"
+echo " Rust File Manager 本地打包與部署 (build-local)"
 echo " 專案根目錄: $PROJECT_ROOT"
 echo " 目標部署目錄: $TARGET_DIR"
 echo "=========================================================="
 
 mkdir -p "$TARGET_DIR"
 PLUGINS_DEST_DIR="$TARGET_DIR/plugins"
-PLUGINS_PKG_DEST_DIR="$TARGET_DIR/plugins-packages"
-mkdir -p "$PLUGINS_DEST_DIR" "$PLUGINS_PKG_DEST_DIR"
+mkdir -p "$PLUGINS_DEST_DIR"
+
+# 清理舊版遺留產物
+rm -f "$TARGET_DIR/rust-file-manager" "$TARGET_DIR/rust-file-manager.exe" "$TARGET_DIR/rust-file-manager-portable-windows-x64.exe"
+rm -rf "$TARGET_DIR/plugins-packages"
 
 # 1. 編譯主體執行檔 (Portable)
 echo ""
@@ -49,9 +52,9 @@ if [ ! -f "$SRC_BIN" ]; then
 fi
 
 if [ -f "$SRC_BIN" ]; then
-  cp "$SRC_BIN" "$TARGET_DIR/rust-file-manager"
-  chmod +x "$TARGET_DIR/rust-file-manager"
-  echo "   ✔ 已複製主體執行檔至: $TARGET_DIR/rust-file-manager"
+  cp "$SRC_BIN" "$TARGET_DIR/rfm"
+  chmod +x "$TARGET_DIR/rfm"
+  echo "   ✔ 已複製主體執行檔至: $TARGET_DIR/rfm"
 else
   echo "   [WARN] 未找到主體執行檔: $SRC_BIN"
 fi
@@ -61,20 +64,13 @@ echo ""
 echo ">>> [2/2] 開始打包所有獨立外掛..."
 "$SCRIPT_DIR/build-plugins.sh" "$PROJECT_ROOT/release-artifacts/plugins"
 
-# 複製 .rfmp 安裝套件
-for pkg in "$PROJECT_ROOT/release-artifacts/plugins"/*.rfmp; do
-  if [ -f "$pkg" ]; then
-    cp "$pkg" "$PLUGINS_PKG_DEST_DIR/"
-    echo "   ✔ [套件包] $(basename "$pkg") -> $PLUGINS_PKG_DEST_DIR"
-  fi
-done
-
 # 同步已安裝外掛目錄
 if [ -d "$PROJECT_ROOT/plugins" ]; then
   for pdir in "$PROJECT_ROOT/plugins"/*; do
     if [ -d "$pdir" ] && [ -f "$pdir/plugin.json" ]; then
       pid="$(basename "$pdir")"
       target_pdir="$PLUGINS_DEST_DIR/$pid"
+      rm -rf "$target_pdir"
       mkdir -p "$target_pdir"
       cp -r "$pdir"/* "$target_pdir/"
       echo "   ✔ [已安裝外掛] $pid -> $target_pdir"
@@ -86,7 +82,6 @@ echo ""
 echo "=========================================================="
 echo " 本地打包與部署完成！"
 echo " 部署目錄: $TARGET_DIR"
-echo " 執行檔: $TARGET_DIR/rust-file-manager"
+echo " 執行檔: $TARGET_DIR/rfm"
 echo " 外掛目錄: $PLUGINS_DEST_DIR"
-echo " 外掛套件包: $PLUGINS_PKG_DEST_DIR"
 echo "=========================================================="
