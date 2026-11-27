@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Rust File Manager (Tauri 2.x) 跨平台發布打包腳本 (Build Release & Export Artifacts)
 
@@ -207,7 +207,13 @@ if (-not $PortableOnly) {
         }
         $installers = Get-ChildItem -Path $BundleDir -Recurse -File -Include $filterPatterns
         foreach ($file in $installers) {
-            $dest = Join-Path $OutDir $file.Name
+            # 若為 MSI 安裝包，去除 Tauri 自動附加之語言代碼 (例如 _zh-TW.msi 或 _en-US.msi -> .msi)
+            $cleanName = if ($file.Extension -ieq ".msi") {
+                $file.Name -replace '(_[a-zA-Z]{2}-[a-zA-Z]{2}|\.en-US|\.zh-TW)(?=\.msi$)', ''
+            } else {
+                $file.Name
+            }
+            $dest = Join-Path $OutDir $cleanName
             Copy-Item -Path $file.FullName -Destination $dest -Force
             Write-Host "[OK]    已匯出系統安裝包: $dest" -ForegroundColor Green
         }
