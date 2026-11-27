@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 const MAX_LOG_FILE_BYTES: u64 = 5 * 1024 * 1024; // 單一檔案上限 5 MB，超過自動輪替 (Rotation)
@@ -280,14 +280,33 @@ impl AppLogger {
     }
 }
 
-/// 取得應用程式主要基底目錄（優先使用 .exe 同目錄以達成免安裝 Portable 設計，否則使用系統設定目錄）
+/// 檢測目標目錄是否具備寫入權限（透過建立並移除極小的臨時測試檔）
+pub fn is_directory_writable(dir: &Path) -> bool {
+    if !dir.exists() || !dir.is_dir() {
+        return false;
+    }
+    let probe = dir.join(format!(".rfm_perm_probe_{}", std::process::id()));
+    if fs::write(&probe, b"ok").is_ok() {
+        let _ = fs::remove_file(&probe);
+        true
+    } else {
+        false
+    }
+}
+
+/// 取得應用程式主要基底目錄
+/// 1. 若執行檔同層具備寫入權限（如可攜式免安裝版），優先使用 exe 目錄，實現零依賴 Portable。
+/// 2. 若執行檔目錄為唯讀（如標準 MSI 安裝至 Program Files），自動導向至使用者標準設定目錄 (AppData / config_dir)。
 pub fn resolve_app_directory() -> PathBuf {
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
-            return exe_dir.to_path_buf();
+            if is_directory_writable(exe_dir) {
+                return exe_dir.to_path_buf();
+            }
         }
     }
-    let base = dirs::config_dir()
+    let base = dirs::data_local_dir()
+        .or_else(dirs::config_dir)
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."));
     base.join("rust-file-manager")
@@ -361,5 +380,20 @@ mod tests {
         });
         let warnings = diagnose_config_value(&bad_json);
         assert_eq!(warnings.len(), 3);
+    }
+
+    #[test]
+    fn test_is_directory_writable_and_resolve_app_directory() {
+        let temp_dir = std::env::temp_dir();
+        assert!(is_directory_writable(&temp_dir));
+
+        let non_existent = temp_dir.join("non_existent_rfm_dir_12345");
+        assert!(!is_directory_writable(&non_existent));
+
+        let app_dir = resolve_app_directory();
+        assert!(!app_dir.as_os_str().is_empty());
+
+        let log_dir = resolve_log_directory();
+        assert!(log_dir.ends_with("logs"));
     }
 }

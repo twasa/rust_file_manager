@@ -138,10 +138,29 @@ pub fn list_installed_plugins_in_dir(plugins_dir: &Path) -> Result<Vec<Installed
     Ok(result)
 }
 
-/// 列出當前環境中所有已安裝的外掛
+/// 列出當前環境中所有已安裝的外掛（支援使用者目錄與系統內建外掛目錄合併載入）
 pub fn list_installed_plugins() -> Result<Vec<InstalledPluginInfo>, String> {
-    let dir = ensure_plugins_directory()?;
-    list_installed_plugins_in_dir(&dir)
+    let user_dir = ensure_plugins_directory()?;
+    let mut plugins = list_installed_plugins_in_dir(&user_dir)?;
+
+    // 若為系統安裝版且 exe 同目錄存在 plugins/（如隨 MSI 安裝的內建外掛），一併掃描載入
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let sys_plugins_dir = exe_dir.join("plugins");
+            if sys_plugins_dir.exists() && sys_plugins_dir != user_dir {
+                if let Ok(sys_plugins) = list_installed_plugins_in_dir(&sys_plugins_dir) {
+                    for p in sys_plugins {
+                        if !plugins.iter().any(|existing| existing.id == p.id) {
+                            plugins.push(p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    plugins.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(plugins)
 }
 
 /// 安裝外掛套件包（支援 `.rfmp` 或 `.zip` 壓縮包）

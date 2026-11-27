@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 確保 Windows 平台執行 `build-release.ps1` 時交付目錄 (`release-artifacts/`) 純粹僅含單一 `.msi` 與 `SHA256SUMS.txt`。
 
 ### Fixed
+- **修復系統安裝版 (MSI / Program Files) 因唯讀權限導致設定檔 (settings.json) 無法持久化之缺陷 (Dual-Mode Portable / Installed Storage)** (`src-tauri/src/logger.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/plugins_ops.rs`)：
+  - 新增目錄寫入權限探測函式 (`is_directory_writable`)，自動識別當前執行環境為「免安裝可攜模式 (Portable)」或「系統唯讀安裝模式 (Installed)」。
+  - 若執行檔目錄具備寫入權限（如放於隨身碟或自訂工具目錄），維持 Portable 原生設計將設定檔與日誌存放於同層；若為系統唯讀目錄（如安裝於 `C:\Program Files`），自動回退導向至使用者標準資料目錄（Windows: `%LOCALAPPDATA%\rust-file-manager\settings.json`）。
+  - 若安裝版使用者目錄尚無設定檔但執行檔同層附帶範本時自動複製初值，外掛系統亦同步支援同時掃描系統內建外掛與使用者自訂外掛目錄。
 - **修復書籤載入時特定工作區路徑遭錯誤刪除之倒退缺陷 (Bookmark Persistence & Whitelist Purge Fix)** (`src/store/useAppStore.ts` & `src/store/useAppStore.test.ts`)：
   - 徹底移除 `importConfigJson` 中過時之硬編碼路徑過濾邏輯（早期為清理 v0.1 硬編碼工作區遺留的 `filter(b => b.path !== "D:/devops_workspace" ...)`）。
   - 改採健全結構校驗（確保每個書籤具備合法的字串型別 `label` 與 `path`），確保使用者新增之任何路徑（包含本機工作區、磁碟根目錄或任意工具目錄）在視窗重啟後均可完整保留不丟失。

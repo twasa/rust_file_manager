@@ -342,14 +342,31 @@ fn cmd_clear_cache(state: State<'_, AppState>) {
     state.cache.clear_all();
 }
 
-/// 取得跨平台預設設定檔路徑（優先存放於執行檔同目錄 settings.json，保持免安裝可攜性）
+/// 取得跨平台預設設定檔路徑（可攜版存放於執行檔同層，唯讀安裝版自動儲存至使用者標準 AppData 目錄）
 pub fn resolve_default_config_file() -> PathBuf {
     let app_dir = resolve_app_directory();
+    let target = app_dir.join("settings.json");
+
+    // 若為安裝版 (app_dir != exe_dir) 且使用者目錄尚無設定檔，但 exe 同層有範本/預設設定檔，則自動複製為初值
+    if !target.exists() {
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                if exe_dir != app_dir {
+                    let exe_cfg = exe_dir.join("settings.json");
+                    if exe_cfg.exists() {
+                        let _ = fs::create_dir_all(&app_dir);
+                        let _ = fs::copy(&exe_cfg, &target);
+                    }
+                }
+            }
+        }
+    }
+
     let legacy_cfg = app_dir.join("rfm-settings.json");
     if legacy_cfg.exists() {
         legacy_cfg
     } else {
-        app_dir.join("settings.json")
+        target
     }
 }
 
@@ -738,6 +755,7 @@ async fn cmd_read_plugin_file_content(
 pub fn init_webview2_environment() {
     if std::env::var("WEBVIEW2_USER_DATA_FOLDER").is_err() {
         let app_dir = resolve_app_directory();
+        let _ = fs::create_dir_all(&app_dir);
         let portable_webview_dir = app_dir.join("data").join("webview");
 
         // 測試 app_dir 是否具有寫入權限
