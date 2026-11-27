@@ -7,13 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- **發布打包流程純粹化 (`scripts/build-release.ps1`, `scripts/build-release.sh`, `package.json`)**:
-  - `build-release.ps1` 與 `build-release.sh` 預設專注打包平台官方系統安裝包：Windows 平台打包輸出單一 MSI 安裝包 (`*.msi`)，Linux 輸出 `.deb`、`.rpm` 與 `.AppImage`，macOS 輸出 `.dmg`。
-  - 預設不再同時將免安裝單一執行檔重複傾印至 `release-artifacts/`，如需免安裝版可顯式傳入 `-PortableOnly` 或 `-IncludePortable`。
-  - 確保 Windows 平台執行 `build-release.ps1` 時交付目錄 (`release-artifacts/`) 純粹僅含單一 `.msi` 與 `SHA256SUMS.txt`。
+## [0.4.1] - 2026-11-28
 
 ### Fixed
+- **修復多媒體預覽控制列多餘之 Web 下載選項與防護 (Media Preview Controls Hygiene)** (`plugins/media/MediaPreviewComponent.tsx` & `src/previewControlsClean.test.ts`)：
+  - 於 `<video>` 與 `<audio>` 標籤中配置 `controlsList="nodownload"` 與 context menu 右鍵選單攔截，徹底去除原生控制列更多選項 (⋮) 中的「下載」按鈕，確保本地播放器控制項體驗純粹。
+- **恢復受密碼保護 PDF 於預覽窗格之即時解鎖輸入互動 (PDF Password-Protected Preview Restore)** (`src-tauri/src/lib.rs` & `plugins/pdf/PdfPreviewComponent.tsx`)：
+  - 移除破壞密碼輸入互動之實驗性旗標（`--enable-features=msPdfEnableAsPreview`），完整恢復微軟 Edge WebView2 原生 PDF 密碼輸入對話框，確保受密碼保護之 PDF 檔案能直接在預覽窗格中解鎖檢視。
+  - 前端 PDF 嵌入 URL 強化完整工具列抑制參數（`#toolbar=0&navpanes=0&scrollbar=0&statusbar=0&messages=0`）與右鍵選單攔截。
 - **修復系統安裝版 (MSI / Program Files) 因唯讀權限導致設定檔 (settings.json) 無法持久化之缺陷 (Dual-Mode Portable / Installed Storage)** (`src-tauri/src/logger.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/plugins_ops.rs`)：
   - 新增目錄寫入權限探測函式 (`is_directory_writable`)，自動識別當前執行環境為「免安裝可攜模式 (Portable)」或「系統唯讀安裝模式 (Installed)」。
   - 若執行檔目錄具備寫入權限（如放於隨身碟或自訂工具目錄），維持 Portable 原生設計將設定檔與日誌存放於同層；若為系統唯讀目錄（如安裝於 `C:\Program Files`），自動回退導向至使用者標準資料目錄（Windows: `%LOCALAPPDATA%\rust-file-manager\settings.json`）。
@@ -28,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 設定 `bundle.targets` 為 `["msi", "deb", "appimage", "dmg"]`，在 Windows 平台上全面以標準 Windows Installer (`.msi`) 取代 NSIS (`-setup.exe`)，實現單一 `.msi` 乾淨封裝。
   - 啟用 WiX 原生 `WixUI_InstallDir` 介面導引，在安裝過程中主動詢問使用者自訂目標安裝目錄（具備「瀏覽 (Browse...)」選擇路徑對話框），並於安裝完成時顯示成功摘要資訊。
   - 設定 WiX 語系支援 `zh-TW` 與 `en-US`，提供更親和的安裝體驗。
+- **發布打包流程純粹化 (`scripts/build-release.ps1`, `scripts/build-release.sh`, `package.json`)**:
+  - `build-release.ps1` 與 `build-release.sh` 預設專注打包平台官方系統安裝包：Windows 平台打包輸出單一 MSI 安裝包 (`*.msi`)，Linux 輸出 `.deb`、`.rpm` 與 `.AppImage`，macOS 輸出 `.dmg`。
+  - 預設不再同時將免安裝單一執行檔重複傾印至 `release-artifacts/`，如需免安裝版可顯式傳入 `-PortableOnly` 或 `-IncludePortable`。
+  - 確保 Windows 平台執行 `build-release.ps1` 時交付目錄 (`release-artifacts/`) 純粹僅含單一 `.msi` 與 `SHA256SUMS.txt`。
 
 ## [0.4.0] - 2026-11-27
 
