@@ -92,6 +92,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const updateKeybinding = useAppStore((s) => s.updateKeybinding);
   const resetKeybindings = useAppStore((s) => s.resetKeybindings);
   const resetAllSettings = useAppStore((s) => s.resetAllSettings);
+  const resetToFactoryDefaults = useAppStore((s) => s.resetToFactoryDefaults);
   const clearAllTabHistory = useAppStore((s) => s.clearAllTabHistory);
   const conflictStrategy = useAppStore((s) => s.conflictStrategy);
   const setConflictStrategy = useAppStore((s) => s.setConflictStrategy);
@@ -1309,10 +1310,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    resetAllSettings();
+                  onClick={async () => {
+                    resetToFactoryDefaults();
+                    await flushAutoSave();
                     setConfirmResetAll(false);
-                    onNotify?.("已將所有偏好設定恢復為出廠預設值");
+                    onNotify?.("已將所有偏好設定與分頁歷史徹底恢復為出廠預設值");
                   }}
                   className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-semibold"
                 >

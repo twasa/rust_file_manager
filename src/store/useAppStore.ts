@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import { apiSaveConfigFile } from "../api";
 import type {
   ConflictStrategy,
@@ -238,6 +237,22 @@ interface PaneState {
   activeTabId: string;
 }
 
+export function createFactoryDefaultPanes(initialPath = "~"): Record<PaneId, PaneState> {
+  const norm = initialPath.replace(/\\/g, "/");
+  const leftTab = createNewTab(norm, "#3b82f6");
+  const rightTab = createNewTab(norm, "#10b981");
+  return {
+    left: {
+      tabs: [leftTab],
+      activeTabId: leftTab.id,
+    },
+    right: {
+      tabs: [rightTab],
+      activeTabId: rightTab.id,
+    },
+  };
+}
+
 interface ClipboardData {
   mode: "copy" | "cut";
   paths: string[];
@@ -296,6 +311,7 @@ interface AppStoreState {
   updateKeybinding: (id: ShortcutActionId, newCombo: string) => void;
   resetKeybindings: () => void;
   resetAllSettings: () => void;
+  resetToFactoryDefaults: (defaultPath?: string) => void;
   addBookmark: (label: string, path: string) => void;
   removeBookmark: (path: string) => void;
 
@@ -332,54 +348,40 @@ interface AppStoreState {
   importConfigJson: (jsonString: string) => void;
 }
 
-const initialLeftTab = createNewTab("~", "#3b82f6");
-const initialRightTab = createNewTab("~", "#10b981");
-
-export const useAppStore = create<AppStoreState>()(
-  persist(
-    (set, get) => ({
-      activePane: "left",
-      dualPaneEnabled: false,
-      showHiddenFiles: false,
-      showPreviewPanel: true,
-      previewPanelWidth: 360,
-      maxPreviewSizeBytes: 5 * 1024 * 1024,
-      pluginsConfig: {},
-      showQueueDrawer: false,
-      conflictStrategy: "ask",
-      queueRetention: {
-        keepHistory: true,
-        retentionDays: 7,
-        maxEvents: 50,
-      },
-      logFormat: "json",
-      logLevel: "error",
-      confirmDelete: true,
-      pendingConflictPrompt: null,
-      pendingDeletePrompt: null,
-      bookmarks: [],
-      fontSettings: {
-        fontFamily: AVAILABLE_FONTS[0].value,
-        fontSizePx: 14,
-        rowHeightPx: 34,
-        uiFontSizePx: 14,
-      },
-      keybindings: DEFAULT_KEYBINDINGS,
-      panes: {
-        left: {
-          tabs: [initialLeftTab],
-          activeTabId: initialLeftTab.id,
-        },
-        right: {
-          tabs: [initialRightTab],
-          activeTabId: initialRightTab.id,
-        },
-      },
-      clipboard: null,
-      dragPayload: null,
-      transferJobs: [],
-      lastUndoRenamePairs: [],
-      refreshVersion: 0,
+export const useAppStore = create<AppStoreState>()((set, get) => ({
+  activePane: "left",
+  dualPaneEnabled: false,
+  showHiddenFiles: false,
+  showPreviewPanel: true,
+  previewPanelWidth: 360,
+  maxPreviewSizeBytes: 5 * 1024 * 1024,
+  pluginsConfig: {},
+  showQueueDrawer: false,
+  conflictStrategy: "ask",
+  queueRetention: {
+    keepHistory: true,
+    retentionDays: 7,
+    maxEvents: 50,
+  },
+  logFormat: "json",
+  logLevel: "error",
+  confirmDelete: true,
+  pendingConflictPrompt: null,
+  pendingDeletePrompt: null,
+  bookmarks: [],
+  fontSettings: {
+    fontFamily: AVAILABLE_FONTS[0].value,
+    fontSizePx: 14,
+    rowHeightPx: 34,
+    uiFontSizePx: 14,
+  },
+  keybindings: DEFAULT_KEYBINDINGS,
+  panes: createFactoryDefaultPanes(),
+  clipboard: null,
+  dragPayload: null,
+  transferJobs: [],
+  lastUndoRenamePairs: [],
+  refreshVersion: 0,
 
       setActivePane: (pane) => set({ activePane: pane }),
       setDualPaneEnabled: (enabled) =>
@@ -457,6 +459,48 @@ export const useAppStore = create<AppStoreState>()(
           keybindings: DEFAULT_KEYBINDINGS,
           refreshVersion: state.refreshVersion + 1,
         })),
+
+      resetToFactoryDefaults: (defaultPath?: string) => {
+        const factoryPanes = createFactoryDefaultPanes(defaultPath || "~");
+        if (typeof window !== "undefined" && window.localStorage) {
+          try {
+            window.localStorage.removeItem("rust_file_manager_settings_v1");
+          } catch {}
+        }
+        set((state) => ({
+          dualPaneEnabled: false,
+          showHiddenFiles: false,
+          showPreviewPanel: true,
+          previewPanelWidth: 360,
+          maxPreviewSizeBytes: 5 * 1024 * 1024,
+          pluginsConfig: {},
+          showQueueDrawer: false,
+          confirmDelete: true,
+          pendingConflictPrompt: null,
+          pendingDeletePrompt: null,
+          conflictStrategy: "ask",
+          queueRetention: {
+            keepHistory: true,
+            retentionDays: 7,
+            maxEvents: 50,
+          },
+          logFormat: "json",
+          logLevel: "error",
+          bookmarks: [],
+          fontSettings: {
+            fontFamily: AVAILABLE_FONTS[0].value,
+            fontSizePx: 14,
+            rowHeightPx: 34,
+            uiFontSizePx: 14,
+          },
+          keybindings: DEFAULT_KEYBINDINGS,
+          panes: factoryPanes,
+          activePane: "left",
+          clipboard: null,
+          dragPayload: null,
+          refreshVersion: state.refreshVersion + 1,
+        }));
+      },
 
       addBookmark: (label, path) =>
         set((state) => {
@@ -911,6 +955,68 @@ export const useAppStore = create<AppStoreState>()(
         if (!cfg || typeof cfg !== "object") {
           throw new Error("設定檔格式不正確，缺少有效設定物件");
         }
+
+        // 快速鍵版本升級與健全處理
+        let importedKeybindings = DEFAULT_KEYBINDINGS;
+        if (Array.isArray(cfg.keybindings)) {
+          importedKeybindings = DEFAULT_KEYBINDINGS.map((defKb) => {
+            const saved = cfg.keybindings.find((k: KeybindingItem) => k.id === defKb.id);
+            if (!saved) return defKb;
+            const nextCombo =
+              defKb.id === "toggle_queue" && saved.keyCombo === "F3"
+                ? "Ctrl+Q"
+                : saved.keyCombo;
+            return { ...defKb, keyCombo: nextCombo };
+          });
+        }
+
+        // 書籤清理（過濾早期硬編碼的工作區書籤）
+        let importedBookmarks = Array.isArray(cfg.bookmarks) ? cfg.bookmarks : [];
+        importedBookmarks = importedBookmarks.filter(
+          (b: { label: string; path: string }) =>
+            b.path !== "D:/devops_workspace" &&
+            b.path !== "D:/devops_workspace/private"
+        );
+
+        // 分頁健全保護：若 cfg 沒有完整 panes，則使用純淨的工廠預設分頁，杜絕繼承歷史幽靈
+        const sanitizeTabs = (tabs?: TabItem[]): TabItem[] | undefined => {
+          if (!Array.isArray(tabs) || tabs.length === 0) return undefined;
+          return tabs.map((t) => {
+            const { history, historyIndex } = sanitizeTabHistory(
+              t.history,
+              t.historyIndex,
+              t.path
+            );
+            return { ...t, history, historyIndex };
+          });
+        };
+
+        const resolvedPanes: Record<PaneId, PaneState> =
+          cfg.panes && cfg.panes.left && cfg.panes.right
+            ? {
+                left: {
+                  ...cfg.panes.left,
+                  tabs:
+                    sanitizeTabs(cfg.panes.left.tabs) ||
+                    createFactoryDefaultPanes().left.tabs,
+                  activeTabId:
+                    cfg.panes.left.activeTabId ||
+                    cfg.panes.left.tabs?.[0]?.id ||
+                    "tab_left_default",
+                },
+                right: {
+                  ...cfg.panes.right,
+                  tabs:
+                    sanitizeTabs(cfg.panes.right.tabs) ||
+                    createFactoryDefaultPanes().right.tabs,
+                  activeTabId:
+                    cfg.panes.right.activeTabId ||
+                    cfg.panes.right.tabs?.[0]?.id ||
+                    "tab_right_default",
+                },
+              }
+            : createFactoryDefaultPanes();
+
         set((state) => ({
           dualPaneEnabled:
             typeof cfg.dualPaneEnabled === "boolean"
@@ -965,159 +1071,17 @@ export const useAppStore = create<AppStoreState>()(
             cfg.logLevel === "error"
               ? cfg.logLevel
               : state.logLevel,
-          bookmarks: Array.isArray(cfg.bookmarks)
-            ? cfg.bookmarks
-            : state.bookmarks,
+          bookmarks: importedBookmarks,
           fontSettings:
             cfg.fontSettings && typeof cfg.fontSettings === "object"
               ? { ...state.fontSettings, ...cfg.fontSettings }
               : state.fontSettings,
-          keybindings: Array.isArray(cfg.keybindings)
-            ? cfg.keybindings
-            : state.keybindings,
-          panes:
-            cfg.panes && cfg.panes.left && cfg.panes.right
-              ? {
-                  left: {
-                    ...cfg.panes.left,
-                    tabs: (cfg.panes.left.tabs || []).map((t: TabItem) => {
-                      const { history, historyIndex } = sanitizeTabHistory(
-                        t.history,
-                        t.historyIndex,
-                        t.path
-                      );
-                      return { ...t, history, historyIndex };
-                    }),
-                  },
-                  right: {
-                    ...cfg.panes.right,
-                    tabs: (cfg.panes.right.tabs || []).map((t: TabItem) => {
-                      const { history, historyIndex } = sanitizeTabHistory(
-                        t.history,
-                        t.historyIndex,
-                        t.path
-                      );
-                      return { ...t, history, historyIndex };
-                    }),
-                  },
-                }
-              : state.panes,
+          keybindings: importedKeybindings,
+          panes: resolvedPanes,
           refreshVersion: state.refreshVersion + 1,
         }));
       },
-    }),
-    {
-      name: "rust_file_manager_settings_v1",
-      version: 3,
-      migrate: (persistedState: unknown, version: number) => {
-        const p = (persistedState as Partial<AppStoreState>) || {};
-        if (version < 2) {
-          p.conflictStrategy = "ask";
-          if (Array.isArray(p.keybindings)) {
-            p.keybindings = p.keybindings.map((k) =>
-              k.id === "toggle_queue" && k.keyCombo === "F3"
-                ? { ...k, keyCombo: "Ctrl+Q", defaultCombo: "Ctrl+Q" }
-                : k
-            );
-          }
-        }
-        if (version < 3 && Array.isArray(p.bookmarks)) {
-          // 清除早期預設硬編碼的工作區書籤，保留使用者自行新增的其他書籤
-          p.bookmarks = p.bookmarks.filter(
-            (b) =>
-              b.path !== "D:/devops_workspace" &&
-              b.path !== "D:/devops_workspace/private"
-          );
-        }
-        return p as AppStoreState;
-      },
-      merge: (persistedState, currentState) => {
-        const p = (persistedState as Partial<AppStoreState>) || {};
-        const mergedKeybindings = DEFAULT_KEYBINDINGS.map((defKb) => {
-          const saved = p.keybindings?.find((k) => k.id === defKb.id);
-          if (!saved) return defKb;
-          // 若舊設定仍為 F3，自動升級為 Ctrl+Q
-          const nextCombo =
-            defKb.id === "toggle_queue" && saved.keyCombo === "F3"
-              ? "Ctrl+Q"
-              : saved.keyCombo;
-          return { ...defKb, keyCombo: nextCombo };
-        });
-        const mergedFontSettings: FontSettings = {
-          ...currentState.fontSettings,
-          ...(p.fontSettings || {}),
-          uiFontSizePx:
-            p.fontSettings?.uiFontSizePx ||
-            currentState.fontSettings.uiFontSizePx ||
-            14,
-        };
-        const mergedQueueRetention: QueueRetentionPolicy = {
-          ...currentState.queueRetention,
-          ...(p.queueRetention || {}),
-        };
-        const sanitizeTabs = (tabs?: TabItem[]): TabItem[] | undefined => {
-          if (!Array.isArray(tabs)) return undefined;
-          return tabs.map((t) => {
-            const { history, historyIndex } = sanitizeTabHistory(
-              t.history,
-              t.historyIndex,
-              t.path
-            );
-            return { ...t, history, historyIndex };
-          });
-        };
-
-        const mergedPanes = p.panes
-          ? {
-              left: {
-                ...p.panes.left,
-                tabs:
-                  sanitizeTabs(p.panes.left?.tabs) ||
-                  currentState.panes.left.tabs,
-                activeTabId:
-                  p.panes.left?.activeTabId ||
-                  currentState.panes.left.activeTabId,
-              },
-              right: {
-                ...p.panes.right,
-                tabs:
-                  sanitizeTabs(p.panes.right?.tabs) ||
-                  currentState.panes.right.tabs,
-                activeTabId:
-                  p.panes.right?.activeTabId ||
-                  currentState.panes.right.activeTabId,
-              },
-            }
-          : currentState.panes;
-
-        return {
-          ...currentState,
-          ...p,
-          panes: mergedPanes,
-          fontSettings: mergedFontSettings,
-          queueRetention: mergedQueueRetention,
-          keybindings: mergedKeybindings,
-        };
-      },
-      partialize: (state) => ({
-        dualPaneEnabled: state.dualPaneEnabled,
-        showHiddenFiles: state.showHiddenFiles,
-        showPreviewPanel: state.showPreviewPanel,
-        previewPanelWidth: state.previewPanelWidth,
-        maxPreviewSizeBytes: state.maxPreviewSizeBytes,
-        pluginsConfig: state.pluginsConfig,
-        confirmDelete: state.confirmDelete,
-        conflictStrategy: state.conflictStrategy,
-        queueRetention: state.queueRetention,
-        logFormat: state.logFormat,
-        logLevel: state.logLevel,
-        bookmarks: state.bookmarks,
-        fontSettings: state.fontSettings,
-        keybindings: state.keybindings,
-        panes: state.panes,
-      }),
-    }
-  )
+    })
 );
 
 // --- 自動儲存設定檔至磁碟 (Auto-save Settings to settings.json) ---

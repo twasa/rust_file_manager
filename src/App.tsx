@@ -180,15 +180,18 @@ export const App: React.FC = () => {
 
     apiLoadConfigFile()
       .then((rawJson) => {
-        if (rawJson) {
+        if (rawJson && rawJson.trim().length > 0) {
           useAppStore.getState().importConfigJson(rawJson);
         } else {
-          // 若設定檔尚未建立，將預設設定存入磁碟 settings.json
+          // 若設定檔尚未建立（全新初次執行），強制出廠重置並存入全新 settings.json
+          useAppStore.getState().resetToFactoryDefaults();
           saveSettingsToFile().catch(console.error);
         }
       })
       .catch((err) => {
-        console.warn("Failed to load initial settings:", err);
+        console.warn("Failed to load initial settings, falling back to factory defaults:", err);
+        useAppStore.getState().resetToFactoryDefaults();
+        saveSettingsToFile().catch(console.error);
       })
       .finally(() => {
         // 載入完成後啟動變更自動儲存至磁碟防抖機制

@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **WebView2 資料目錄隔離與可攜式環境 (WebView2 User Data Directory Isolation)** (`src-tauri/src/lib.rs`)：
+  - 在 Windows 平台下於 WebView 啟動前自動配置 `WEBVIEW2_USER_DATA_FOLDER`。
+  - 免安裝可攜模式（如 `rfm.exe` 放於可寫目錄）自動導向至執行檔同層之 `data/webview`，徹底與系統 `%LOCALAPPDATA%\...\EBWebView` 隔離，杜絕多個安裝版本或開發環境共用同一個 WebView2 本地快取與資料庫。
+  - 系統唯讀目錄（如安裝於 Program Files）自動依據目錄路徑 Hash 在 AppData 中獨立存放，保障安裝版與各實例彼此完全解耦。
+- **純淨出廠重置與狀態管理架構優化 (Pure Factory Defaults & Single Source of Truth)** (`src/store/useAppStore.ts` & `src/App.tsx` & `src/components/SettingsModal.tsx`)：
+  - **確立 `settings.json` 為唯一真實來源**：移除 Zustand `persist` 對瀏覽器 `localStorage` 的濫用與隱式讀寫，徹底斬斷在無 `settings.json` 時自動從 `localStorage` 還原舊分頁歷史的幽靈傳播鏈。
+  - **出廠狀態防禦 (`resetToFactoryDefaults`)**：當無 `settings.json`（全新環境或刪除重設）時，嚴格執行出廠重置，分頁歷史強制只有 1 筆當前目錄，並主動清理殘留之 `localStorage`，確保新生成的 `settings.json` 純淨出廠。
+  - **設定檔缺少 `panes` 健全保護**：若載入的 JSON 缺乏分頁設定，自動回退至純淨出廠分頁，拒絕繼承過往記憶體髒資料。
+  - **設定面板全面恢復出廠設定**：在設定視窗底部提供「確定重設」按鈕，一鍵將所有偏好設定與分頁歷史徹底恢復為出廠預設值並即時寫入磁碟。
+- **Rust 後端啟動健全保護** (`src-tauri/src/lib.rs`)：
+  - 修正 `ensure_default_config_and_logs` 在初次執行時搶先建立無 `panes` 殘缺設定檔的問題，改由前端出廠狀態完整生成標準 `settings.json`。
+
+### Added
 - **分頁導航歷史上限保護與一鍵清除功能 (Tab Navigation History Capping & Purge)** (`src/store/useAppStore.ts` & `src/components/SettingsModal.tsx` & `src/components/TabBar.tsx`)：
   - **50 筆上限保護**：定義 `MAX_TAB_HISTORY = 50`，在目錄切換時自動修剪過期歷史，杜絕 `history` 陣列無上限累積導致 `settings.json` 膨脹至數百行。
   - **設定檔匯入/還原自動淨化**：在 `importConfigJson` 與 Zustand `merge` 中自動過濾修剪過長歷史，防範舊版資料庫殘留。

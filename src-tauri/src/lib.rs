@@ -353,7 +353,7 @@ pub fn resolve_default_config_file() -> PathBuf {
     }
 }
 
-/// 初次執行時若 logs 目錄或設定檔不存在，自動建立預設目錄與 settings.json
+/// 初次執行時若 logs 目錄不存在，自動建立預設目錄；若設定檔存在則載入日誌等級與格式
 pub fn ensure_default_config_and_logs(logger: &AppLogger) -> PathBuf {
     let log_dir = resolve_log_directory();
     if !log_dir.exists() {
@@ -361,50 +361,23 @@ pub fn ensure_default_config_and_logs(logger: &AppLogger) -> PathBuf {
     }
 
     let config_path = resolve_default_config_file();
-    if !config_path.exists() {
-        if let Some(parent) = config_path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        let default_config = json!({
-            "app": "rust-file-manager",
-            "schemaVersion": 1,
-            "exportedAt": chrono::Utc::now().to_rfc3339(),
-            "settings": {
-                "dualPaneEnabled": false,
-                "showHiddenFiles": false,
-                "showPreviewPanel": false,
-                "confirmDelete": true,
-                "conflictStrategy": "ask",
-                "queueRetention": {
-                    "retainEvents": true,
-                    "maxDays": 30,
-                    "maxEntries": 200
-                },
-                "logFormat": "json",
-                "logLevel": "error",
-                "fontSettings": {
-                    "fontFamily": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                    "fontSizePx": 13,
-                    "uiFontSizePx": 13,
-                    "rowHeightPx": 32
-                },
-                "bookmarks": []
-            }
-        });
-        if let Ok(pretty) = serde_json::to_string_pretty(&default_config) {
-            let _ = fs::write(&config_path, pretty);
-        }
-    } else if let Ok(content) = fs::read_to_string(&config_path) {
-        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
-            let cfg = parsed.get("settings").unwrap_or(&parsed);
-            if let Some(lvl_str) = cfg.get("logLevel").and_then(|v| v.as_str()) {
-                logger.set_level(LogLevel::parse_str(lvl_str));
-            }
-            if let Some(fmt_str) = cfg.get("logFormat").and_then(|v| v.as_str()) {
-                if fmt_str.eq_ignore_ascii_case("text") {
-                    logger.set_format(LogFormat::Text);
-                } else {
-                    logger.set_format(LogFormat::Json);
+    if let Some(parent) = config_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    if config_path.exists() {
+        if let Ok(content) = fs::read_to_string(&config_path) {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
+                let cfg = parsed.get("settings").unwrap_or(&parsed);
+                if let Some(lvl_str) = cfg.get("logLevel").and_then(|v| v.as_str()) {
+                    logger.set_level(LogLevel::parse_str(lvl_str));
+                }
+                if let Some(fmt_str) = cfg.get("logFormat").and_then(|v| v.as_str()) {
+                    if fmt_str.eq_ignore_ascii_case("text") {
+                        logger.set_format(LogFormat::Text);
+                    } else {
+                        logger.set_format(LogFormat::Json);
+                    }
                 }
             }
         }
@@ -757,8 +730,46 @@ async fn cmd_read_plugin_file_content(
         .map_err(|e| e.to_string())?
 }
 
+/// 在 Windows 環境下初始化 WebView2 User Data Folder (UDF)
+/// 優先將資料夾導向執行檔同層之 data/webview（免安裝 Portable 模式），
+/// 若執行檔目錄為系統唯讀（如標準安裝於 Program Files），則自動依目錄 hash 隔離至 AppData，
+/// 杜絕多個安裝實例或開發版本共用同一 WebView2 本地快取與 LocalStorage 造成狀態污染。
+#[cfg(target_os = "windows")]
+pub fn init_webview2_environment() {
+    if std::env::var("WEBVIEW2_USER_DATA_FOLDER").is_err() {
+        let app_dir = resolve_app_directory();
+        let portable_webview_dir = app_dir.join("data").join("webview");
+
+        // 測試 app_dir 是否具有寫入權限
+        let test_file = app_dir.join(".write_test");
+        let is_writable = fs::write(&test_file, b"ok").is_ok();
+        if is_writable {
+            let _ = fs::remove_file(test_file);
+            let _ = fs::create_dir_all(&portable_webview_dir);
+            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &portable_webview_dir);
+        } else if let Some(local_app_data) = dirs::data_local_dir() {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            app_dir.hash(&mut hasher);
+            let dir_hash = format!("{:016x}", hasher.finish());
+
+            let instance_dir = local_app_data
+                .join("io.github.twasa.rustfilemanager")
+                .join("instances")
+                .join(&dir_hash)
+                .join("EBWebView");
+            let _ = fs::create_dir_all(&instance_dir);
+            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &instance_dir);
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "windows")]
+    init_webview2_environment();
+
     let logger = AppLogger::new();
     AppLogger::install_panic_hook(Arc::clone(&logger));
     ensure_default_config_and_logs(&logger);
@@ -871,5 +882,13 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_init_webview2_environment() {
+        init_webview2_environment();
+        let val = std::env::var("WEBVIEW2_USER_DATA_FOLDER");
+        assert!(val.is_ok(), "WEBVIEW2_USER_DATA_FOLDER should be configured on Windows");
     }
 }
