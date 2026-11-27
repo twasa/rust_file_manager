@@ -172,7 +172,12 @@ if [[ "${PORTABLE_ONLY}" -ne 1 && -d "${BUNDLE_DIR}" ]]; then
   if [[ "${OS_NAME}" == "darwin" ]]; then
     find "${BUNDLE_DIR}" -maxdepth 3 -type f -name "*.dmg" -exec cp {} "${OUT_DIR}/" \;
   elif [[ "${OS_NAME}" =~ (mingw|msys|cygwin) ]]; then
-    find "${BUNDLE_DIR}" -maxdepth 3 -type f -name "*.msi" -exec cp {} "${OUT_DIR}/" \;
+    while IFS= read -r f; do
+      [[ -z "$f" ]] && continue
+      base="$(basename "$f")"
+      clean_name="$(echo "$base" | sed -E 's/(_[a-zA-Z]{2}-[a-zA-Z]{2}|\.en-US|\.zh-TW)\.msi$/.msi/')"
+      cp "$f" "${OUT_DIR}/${clean_name}"
+    done < <(find "${BUNDLE_DIR}" -maxdepth 3 -type f -name "*.msi")
   else
     find "${BUNDLE_DIR}" -maxdepth 3 -type f \( \
       -name "*.deb" -o \

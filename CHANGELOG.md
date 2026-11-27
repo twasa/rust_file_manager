@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **去除 Windows MSI 安裝套件檔名中多餘之語系後綴 (Normalize MSI Artifact Filename)** (`scripts/build-release.ps1` & `scripts/build-release.sh`)：
+  - 於本地自動發布打包腳本匯出 Windows MSI 安裝套件至 `release-artifacts/` 時，自動正規化檔名並去除 Tauri WiX bundler 附加之 `_zh-TW` / `_en-US` 語系後綴，產物統一為純粹的 `Rust File Manager_<version>_<arch>.msi`，同時完整保留安裝導引精靈之繁體中文介面。
+
 ## [0.4.1] - 2026-11-28
 
 ### Fixed
