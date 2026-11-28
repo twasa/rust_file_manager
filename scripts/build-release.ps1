@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Rust File Manager (Tauri 2.x) 跨平台發布打包腳本 (Build Release & Export Artifacts)
 
@@ -216,6 +216,19 @@ if (-not $PortableOnly) {
             $dest = Join-Path $OutDir $cleanName
             Copy-Item -Path $file.FullName -Destination $dest -Force
             Write-Host "[OK]    已匯出系統安裝包: $dest" -ForegroundColor Green
+        }
+    }
+}
+
+# 2.5 在 Windows 環境下自動對 release-artifacts 執行數位簽章 (Code Signing)
+if ($IsWindows) {
+    $SignScript = Join-Path $ScriptDir "manage-code-signing.ps1"
+    if (Test-Path $SignScript) {
+        Write-Host "`n[INFO]  檢測並套用 Windows 數位代碼簽署 (Authenticode)..." -ForegroundColor Cyan
+        try {
+            & $SignScript -Action Sign -Path $OutDir
+        } catch {
+            Write-Host "[WARN]  代碼簽署略過: $_" -ForegroundColor Yellow
         }
     }
 }
