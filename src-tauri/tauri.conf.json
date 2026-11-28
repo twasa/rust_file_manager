@@ -53,6 +53,21 @@
       "icons/icon.ico"
     ],
     "windows": {
+      "signCommand": {
+        "cmd": "powershell",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "../scripts/manage-code-signing.ps1",
+          "-Action",
+          "Sign",
+          "-Path",
+          "%1",
+          "-SkipIfMissing"
+        ]
+      },
       "wix": {
         "language": [
           "zh-TW"
