@@ -29,6 +29,9 @@ jobs:
             rust_target: x86_64-apple-darwin
 
     runs-on: ${{ matrix.platform }}
+    env:
+      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
 
     steps:
       - name: Checkout repository
@@ -67,6 +70,16 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Provision Code Signing Certificate
+        if: matrix.platform == 'windows-latest' && env.WINDOWS_CERTIFICATE_BASE64 != ''
+        run: |
+          $certDir = Join-Path $HOME ".code-signing"
+          if (-not (Test-Path $certDir)) { New-Item -ItemType Directory -Force -Path $certDir | Out-Null }
+          $pfxPath = Join-Path $certDir "code-signing.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+          @{ Password = $env:WINDOWS_CERTIFICATE_PASSWORD } | ConvertTo-Json | Out-File (Join-Path $certDir "credentials.json") -Encoding utf8
+          Write-Host "[OK] Code signing certificate successfully provisioned in CI environment." -ForegroundColor Green
 
       - name: Build Tauri application (Portable + Native Installers)
         uses: tauri-apps/tauri-action@v0
