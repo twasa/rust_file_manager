@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     跨專案 Windows 代碼簽名 (Code Signing) 自動配置與簽署工具
 
@@ -374,3 +374,4 @@ if ($Action -eq "ExportSecret") {
     Write-Ok "配置完成後，GitHub Actions 發布流程即可自動為 MSI 與 EXE 打上數位簽章！"
     exit 0
 }
+
